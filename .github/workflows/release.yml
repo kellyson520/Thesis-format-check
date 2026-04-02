@@ -1,0 +1,263 @@
+name: 📦 Build & Release
+
+# 触发条件：推送 v* 格式的 tag（如 v1.0.0）时自动触发
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:   # 允许手动触发（用于测试）
+
+jobs:
+  # ─── 阶段一：构建前端 ────────────────────────────────────────────────────────
+  build-frontend:
+    name: 🎨 Build Vue Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📦 Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: 🔨 Build frontend (Vite)
+        working-directory: frontend
+        run: npm run build
+
+      - name: 📤 Upload frontend dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+  # ─── 阶段二：打包 Windows 可执行文件 ─────────────────────────────────────────
+  build-windows:
+    name: 🪟 Package Windows EXE
+    runs-on: windows-latest
+    needs: build-frontend   # 依赖前端构建完成
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 📦 Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: 📥 Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+      - name: 🔍 Verify frontend dist exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path "frontend/dist/index.html")) {
+            Write-Error "❌ Frontend dist not found! Build failed."
+            exit 1
+          }
+          Write-Host "✅ Frontend dist verified."
+
+      - name: 📝 Get version from tag
+        id: get_version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "TAG=$tag" >> $env:GITHUB_OUTPUT
+          Write-Host "📌 Version: $version"
+
+      - name: 🔨 Build with PyInstaller
+        shell: pwsh
+        run: |
+          # 自动检测是否存在 icon 文件
+          $iconArgs = ""
+          if (Test-Path "src/config/icon.ico") {
+            $iconArgs = "--icon `"src/config/icon.ico`""
+            Write-Host "🎨 Using custom icon: src/config/icon.ico"
+          } else {
+            Write-Host "⚠️ No icon.ico found, using default icon."
+          }
+
+          $cmd = "pyinstaller " +
+            "--name `"ThesisFormatChecker`" " +
+            "--onefile " +
+            "--windowed " +
+            "$iconArgs " +
+            "--add-data `"frontend/dist;frontend/dist`" " +
+            "--add-data `"src/config;src/config`" " +
+            "--hidden-import `"uvicorn.logging`" " +
+            "--hidden-import `"uvicorn.loops`" " +
+            "--hidden-import `"uvicorn.loops.auto`" " +
+            "--hidden-import `"uvicorn.protocols`" " +
+            "--hidden-import `"uvicorn.protocols.http`" " +
+            "--hidden-import `"uvicorn.protocols.http.auto`" " +
+            "--hidden-import `"uvicorn.lifespan`" " +
+            "--hidden-import `"uvicorn.lifespan.on`" " +
+            "--hidden-import `"webview`" " +
+            "--collect-all `"webview`" " +
+            "--collect-all `"docx`" " +
+            "src/main.py"
+
+          Write-Host "🚀 Running: $cmd"
+          Invoke-Expression $cmd
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        continue-on-error: false
+
+      - name: 🔍 Verify EXE was built
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/ThesisFormatChecker.exe")) {
+            Write-Error "❌ EXE not found! PyInstaller failed."
+            exit 1
+          }
+          $size = (Get-Item "dist/ThesisFormatChecker.exe").Length / 1MB
+          Write-Host "✅ EXE built successfully. Size: $([math]::Round($size, 2)) MB"
+
+      - name: 🗜️ Create release archive
+        shell: pwsh
+        run: |
+          $version = "${{ steps.get_version.outputs.VERSION }}"
+          $archiveName = "ThesisFormatChecker-v${version}-Windows-x64.zip"
+          
+          # 创建发布目录
+          New-Item -ItemType Directory -Force -Path "release_pkg"
+          
+          # 复制 EXE
+          Copy-Item "dist/ThesisFormatChecker.exe" "release_pkg/"
+          
+          # 复制规则配置（用户可自定义）
+          New-Item -ItemType Directory -Force -Path "release_pkg/config"
+          Copy-Item "src/config/rules.yaml" "release_pkg/config/" -ErrorAction SilentlyContinue
+          
+          # 创建使用说明 README
+          @"
+          # 论文格式智能校验 v${version}
+          
+          ## 快速开始
+          直接双击 ThesisFormatChecker.exe 运行。
+          
+          ## 自定义规则
+          修改 config/rules.yaml 后重启程序即可生效。
+          
+          ## 系统要求
+          - Windows 10/11 (64位)
+          - 无需安装 Python 或其他依赖
+          "@ | Out-File -FilePath "release_pkg/README.txt" -Encoding UTF8
+          
+          # 打包为 ZIP
+          Compress-Archive -Path "release_pkg/*" -DestinationPath $archiveName -Force
+          echo "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_OUTPUT
+          Write-Host "✅ Archive created: $archiveName"
+        id: create_archive
+
+      - name: 📤 Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: "*.zip"
+          retention-days: 7
+
+  # ─── 阶段三：创建 GitHub Release ─────────────────────────────────────────────
+  create-release:
+    name: 🚀 Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-windows   # 依赖 Windows 打包完成
+    permissions:
+      contents: write      # 必须：允许创建 Release
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 获取完整历史记录，用于生成 changelog
+
+      - name: 📝 Get version info
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+      - name: 📋 Generate changelog
+        id: changelog
+        run: |
+          # 获取上一个 tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "CHANGELOG=🎉 首次发布！" >> $GITHUB_OUTPUT
+          else
+            # 生成两个 tag 之间的提交记录
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges | head -20)
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG="- 版本更新"
+            fi
+            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGELOG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📥 Download Windows release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: ./artifacts/
+
+      - name: 🔍 List artifacts
+        run: ls -la ./artifacts/
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: "📄 论文格式校验 v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## 🎯 论文格式智能校验工具 v${{ steps.version.outputs.VERSION }}
+
+            ### ✨ 更新内容
+            ${{ steps.changelog.outputs.CHANGELOG }}
+
+            ---
+
+            ### 📦 下载说明
+            | 文件 | 平台 | 说明 |
+            |------|------|------|
+            | `ThesisFormatChecker-v${{ steps.version.outputs.VERSION }}-Windows-x64.zip` | Windows 10/11 | 解压后直接运行，无需安装 |
+
+            ### 🚀 快速开始
+            1. 下载 ZIP 文件并解压
+            2. 双击 `ThesisFormatChecker.exe` 运行
+            3. 上传论文 `.docx` 文件即可开始检查
+
+            ### ⚠️ 注意事项
+            - 首次启动可能需要几秒加载时间（正常现象）
+            - 如遇 Windows Defender 拦截，请选择"仍要运行"
+
+            ---
+            > 🤖 由 GitHub Actions 自动构建 · ${{ github.sha }}
+          files: ./artifacts/*.zip
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

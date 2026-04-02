@@ -1,0 +1,61 @@
+document:
+  default_font_east_asia: 宋体
+  default_font_ascii: Times New Roman
+  default_font_size: 12
+  default_line_spacing: 1.5
+headings:
+  level_1:
+    name: 标题1 / Heading 1
+    font_east_asia: 黑体
+    font_ascii: Times New Roman
+    font_size: 16
+    bold: true
+    space_before: 17
+    space_after: 16.5
+    alignment: center
+  level_2:
+    name: 标题2 / Heading 2
+    font_east_asia: 黑体
+    font_ascii: Times New Roman
+    font_size: 14
+    bold: true
+    space_before: 13
+    space_after: 13
+    alignment: left
+  level_3:
+    name: 标题3 / Heading 3
+    font_east_asia: 黑体
+    font_ascii: Times New Roman
+    font_size: 12
+    bold: true
+    space_before: 0
+    space_after: 0
+    alignment: left
+paragraphs:
+  body_text:
+    name: 正文 / Normal
+    font_east_asia: 宋体
+    font_ascii: Times New Roman
+    font_size: 12
+    first_line_indent: 2
+    line_spacing: 1.5
+    alignment: justify
+captions:
+  figure_caption:
+    name: 图注 / Figure Caption
+    font_east_asia: 黑体
+    font_ascii: Times New Roman
+    font_size: 10.5
+    bold: false
+    alignment: center
+    space_before: 6
+    space_after: 6
+  table_caption:
+    name: 表注 / Table Caption
+    font_east_asia: 黑体
+    font_ascii: Times New Roman
+    font_size: 10.5
+    bold: true
+    alignment: center
+    space_before: 6
+    space_after: 6
