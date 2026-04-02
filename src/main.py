@@ -1,7 +1,6 @@
 import os
 import io
 import sys
-import copy
 import json
 import threading
 import uvicorn
@@ -11,25 +10,33 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from docx import Document
 from docx.shared import RGBColor, Pt
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
 
 from engine.rule_loader import RuleLoader
 from engine.validator import Validator
 from engine.docx_parser import DocxParser
 from engine.logger import AppLogger
 
-# ─── Bootstrap ──────────────────────────────────────────────────────────────
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-rules_path = os.path.join(base_dir, "src", "config", "rules.yaml")
-log_dir = os.path.join(base_dir, "logs")
+# ─── 路径解析：兼容 PyInstaller 打包与直接开发运行 ───────────────────────────
+def _get_base_dir() -> str:
+    """
+    返回资源根目录：
+    - PyInstaller frozen 模式：sys._MEIPASS（打包资源解压至此）
+      --add-data "src/config;src/config" 将 rules.yaml 释放到 _MEIPASS/src/config/
+    - 开发模式：项目根目录（src/main.py 向上两级）
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-app_logger = AppLogger(log_dir=log_dir)
+base_dir   = _get_base_dir()
+rules_path = os.path.join(base_dir, "src", "config", "rules.yaml")
+log_dir    = os.path.join(base_dir, "logs")
+
+app_logger  = AppLogger(log_dir=log_dir)
 rule_loader = RuleLoader(rules_path)
-validator = Validator(rule_loader.get_rules())
+validator   = Validator(rule_loader.get_rules())
 
 app = FastAPI(title="论文格式校验 API", version="2.0.0")
 
