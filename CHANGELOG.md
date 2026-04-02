@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.1 — 2026-04-02
+
+### 🔧 CI 修复与工程固化
+
+**CI/CD Pipeline**
+- Fixed `actions/setup-node@v4` 缓存失败错误：移除不存在的 `frontend/package-lock.json` 引用，`npm ci` 改为 `npm install`，消除 lockfile 缺失报错。
+- Expanded GitHub Actions 触发策略：新增 `push branches: master` 与 `pull_request` 触发器，每次代码提交自动执行前端构建与 Windows 打包验证。
+- Guarded `create-release` job with `if: startsWith(github.ref, 'refs/tags/v')`，确保普通 push 不触发 Release 发布。
+
+**Engineering Persistence**
+- Centralized `git-manager` 技能文件：写入仓库注册表（URL / 账号 / 本地路径）、PowerShell 分号规则、exit code 误报说明及版本历史表格，永久固化。
+- Added `src/version.py`、`CHANGELOG.md`、`README.md`、`.gitignore` 项目基础设施文件。
+
+---
+
 ## v0.1.0 — 2026-04-02
 
 ### 🚀 初始版本发布（三阶段 MVP 基础代码架构）
