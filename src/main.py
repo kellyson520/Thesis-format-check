@@ -19,24 +19,33 @@ from engine.docx_parser import DocxParser
 from engine.logger import AppLogger
 
 # ─── 路径解析：兼容 PyInstaller 打包与直接开发运行 ───────────────────────────
-def _get_base_dir() -> str:
-    """
-    返回资源根目录：
-    - PyInstaller frozen 模式：sys._MEIPASS（打包资源解压至此）
-      --add-data "src/config;src/config" 将 rules.yaml 释放到 _MEIPASS/src/config/
-    - 开发模式：项目根目录（src/main.py 向上两级）
-    """
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        return sys._MEIPASS
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#
+# Release ZIP 目录结构（frozen 模式）:
+#   ThesisFormatChecker.exe
+#   config/
+#     rules.yaml          ← EXE 同级 config/ 下，用户可直接编辑
+#   logs/                 ← 运行时自动创建
+#
+# 开发模式目录结构:
+#   src/
+#     main.py
+#   src/config/rules.yaml
 
-base_dir   = _get_base_dir()
-rules_path = os.path.join(base_dir, "src", "config", "rules.yaml")
-log_dir    = os.path.join(base_dir, "logs")
+if getattr(sys, "frozen", False):
+    # PyInstaller 打包运行：使用 EXE 所在目录
+    _exe_dir   = os.path.dirname(sys.executable)
+    rules_path = os.path.join(_exe_dir, "config", "rules.yaml")
+    log_dir    = os.path.join(_exe_dir, "logs")
+else:
+    # 开发模式：使用项目根目录（src/main.py 向上两级）
+    _root      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    rules_path = os.path.join(_root, "src", "config", "rules.yaml")
+    log_dir    = os.path.join(_root, "logs")
 
 app_logger  = AppLogger(log_dir=log_dir)
 rule_loader = RuleLoader(rules_path)
 validator   = Validator(rule_loader.get_rules())
+
 
 app = FastAPI(title="论文格式校验 API", version="2.0.0")
 
