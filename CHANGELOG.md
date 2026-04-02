@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.3 — 2026-04-02
+
+### 🐛 Bug Fixes
+- 修复 `src/main.py` 意外丢失 `from pydantic import BaseModel` 导致的启动崩溃问题。
+
+---
+
 ## v0.1.2 — 2026-04-02
 
 ### 🐛 Bug Fixes
