@@ -34,14 +34,14 @@ from engine.logger import AppLogger
 
 if getattr(sys, "frozen", False):
     # PyInstaller 打包运行：使用 EXE 所在目录
-    _exe_dir   = os.path.dirname(sys.executable)
-    rules_path = os.path.join(_exe_dir, "config", "rules.yaml")
-    log_dir    = os.path.join(_exe_dir, "logs")
+    base_dir   = os.path.dirname(sys.executable)
+    rules_path = os.path.join(base_dir, "config", "rules.yaml")
+    log_dir    = os.path.join(base_dir, "logs")
 else:
     # 开发模式：使用项目根目录（src/main.py 向上两级）
-    _root      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    rules_path = os.path.join(_root, "src", "config", "rules.yaml")
-    log_dir    = os.path.join(_root, "logs")
+    base_dir   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    rules_path = os.path.join(base_dir, "src", "config", "rules.yaml")
+    log_dir    = os.path.join(base_dir, "logs")
 
 app_logger  = AppLogger(log_dir=log_dir)
 rule_loader = RuleLoader(rules_path)
