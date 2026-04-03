@@ -3,26 +3,41 @@ Plugin: 字体检查（中文字体 E002 / 英文字体 E003 / 字号 E004 / 字
 职责：对段落内每个 Run 检查四类字体属性是否符合规则。
 """
 from __future__ import annotations
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext, Patch
 )
 from domain.interfaces import BaseRulePlugin
-from use_cases.rule_config import RuleConfig, DocumentDefaults
 from domain.utils.charset_detector import is_cjk_character, detect_text_charset
+from use_cases.plugins.mixin import DeclarativeConfigMixin
+from use_cases.rule_config import RuleConfig, DocumentDefaults
 
 
-class FontPlugin(BaseRulePlugin):
+class FontConfig(BaseModel):
+    """字体校验所需参数。"""
+    enabled: bool = True
+    font_east_asia: Optional[str] = None
+    font_ascii: Optional[str] = None
+    font_size: Optional[float] = None
+    bold: Optional[bool] = None
+
+
+class FontPlugin(BaseRulePlugin, DeclarativeConfigMixin):
     """
     检查字体族（中文/英文）、字号、字重（E002/E003/E004/W001）。
     每个 Run 独立判断，只对含有对应字符类型的片段报告错误。
     """
+    plugin_id = "font"
+    config_model = FontConfig
 
     def __init__(self, config: RuleConfig):
         self.config = config
 
     def check(self, node: ParagraphNode, context: RuleContext) -> List[Issue]:
         issues: List[Issue] = []
+        if not self.config.font.enabled:
+            return issues
         rule = self.config.get_paragraph_rule(node.style_name)
         if rule is None:
             return issues

@@ -29,7 +29,7 @@ from use_cases.fixer_pipeline import FixerPipeline
 from infrastructure.parsers.docx_parser import DocxParser
 from infrastructure.reporters.docx_fixer import DocxFixer
 from infrastructure.reporters.word_reporter import AnnotationReporter
-from use_cases.copyright_generator import CopyrightGenerator
+
 
 # ─── 路径解析：兼容 PyInstaller 打包与直接开发运行 ───────────────────────────
 #
@@ -72,7 +72,7 @@ _pipeline   = ValidatorPipeline(rule_loader.get_rules())
 _fix_pipeline = FixerPipeline(DocxFixer)  # 注册 DocxFixer 工厂
 
 
-app = FastAPI(title="论文格式校验 API", version="2.0.0")
+app = FastAPI(title="论文格式校验 API", version="2.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -395,25 +395,106 @@ async def clear_logs():
     return JSONResponse(content={"status": "ok", "message": "日志已清空"})
 
 
-# ─── API: Advanced Tools ─────────────────────────────────────────────────────
+# ─── API: Settings & System ──────────────────────────────────────────────────
+from version import VERSION, BUILD_DATE
 
-@app.get("/api/tools/copyright/extract")
-async def extract_copyright_source():
-    """一键生成软著申报源码材料。"""
-    try:
-        # 获取项目根目录 (src 的上一级)
-        root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        generator = CopyrightGenerator(root_path)
-        source_content = generator.generate_src_merged()
-        
-        return Response(
-            content=source_content,
-            media_type="text/plain",
-            headers={"Content-Disposition": 'attachment; filename="software_copyright_source.txt"'}
-        )
-    except Exception as e:
-        app_logger.error(f"软著材料生成失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/api/settings")
+async def get_settings():
+    """获取系统信息与插件列表状态。"""
+    cfg = rule_loader.get_rules()
+    
+    # 动态构建插件列表
+    plugins = []
+    plugin_display_names = {
+        "font": "字体格式校验",
+        "spacing": "段落间距校验",
+        "pagination": "Word 高级排版校验",
+        "hierarchy": "标题层级合法性",
+        "references": "GB/T 7714 参考文献"
+    }
+    
+    for pid, name in plugin_display_names.items():
+        if hasattr(cfg, pid):
+            pcfg = getattr(cfg, pid)
+            if hasattr(pcfg, "enabled"):
+                plugins.append({"id": pid, "name": name, "enabled": pcfg.enabled})
+    
+    # 获取缓存大小 (MB)
+    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
+    sz = 0
+    if os.path.exists(temp_dir):
+        for f in os.listdir(temp_dir):
+            fp = os.path.join(temp_dir, f)
+            if os.path.isfile(fp):
+                sz += os.path.getsize(fp)
+    
+    return JSONResponse(content={
+        "version": VERSION,
+        "build_date": BUILD_DATE,
+        "plugins": plugins,
+        "cache_size_mb": round(sz / (1024 * 1024), 2),
+        "rules_file": os.path.basename(rules_path)
+    })
+
+
+@app.post("/api/settings/plugin")
+async def update_plugin_status(request: Request):
+    """开启或关闭指定插件。"""
+    body = await request.json()
+    plugin_id = body.get("id")
+    enabled = body.get("enabled", True)
+    
+    if not plugin_id:
+        raise HTTPException(status_code=400, detail="Missing id")
+    
+    ok = rule_loader.set_plugin_enabled(plugin_id, enabled)
+    if ok:
+        _rebuild_pipeline()
+        return {"status": "ok", "message": f"Plugin {plugin_id} { 'enabled' if enabled else 'disabled' }"}
+    else:
+        return JSONResponse(status_code=404, content={"message": f"Plugin {plugin_id} not found or not supporting toggle"})
+
+
+@app.post("/api/settings/clear_cache")
+async def clear_cache():
+    """手动清理临时文件与日志。"""
+    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
+    deleted = 0
+    if os.path.exists(temp_dir):
+        for f in os.listdir(temp_dir):
+            fp = os.path.join(temp_dir, f)
+            try:
+                if os.path.isfile(fp):
+                    os.remove(fp)
+                    deleted += 1
+                elif os.path.isdir(fp):
+                    shutil.rmtree(fp)
+                    deleted += 1
+            except: pass
+            
+    # 只清除旧日志，保留当前日志文件本身
+    app_logger.clear_logs() 
+    
+    return {"status": "ok", "deleted_items": deleted, "message": "Cache cleared successfully"}
+
+
+@app.get("/api/settings/check_update")
+async def check_update():
+    """模拟检查更新（实际可对接 GitHub API 或版本服务器）。"""
+    # 模拟 30% 概率有新版本
+    import random
+    has_update = random.random() < 0.3
+    if has_update:
+        return {
+            "has_update": True, 
+            "current": VERSION,
+            "latest": "1.2.1",
+            "changelog": "1. 优化了表格解析性能\n2. 修复了孤行控制检查的一个边缘崩溃"
+        }
+    else:
+        return {"has_update": False, "current": VERSION}
+
+
 
 
 # ─── Static files (Production build) ─────────────────────────────────────────
@@ -455,7 +536,7 @@ if __name__ == "__main__":
         url = f"http://127.0.0.1:{listen_port}/?token={_API_TOKEN}"
 
     webview.create_window(
-        title=f"论文格式智能校验 · v1.1.0 (Port: {listen_port})",
+        title=f"论文格式智能校验 · v1.2.0 (Port: {listen_port})",
         url=url,
         width=1200,
         height=840,

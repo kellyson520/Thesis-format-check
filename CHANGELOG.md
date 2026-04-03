@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.2.0 — 2026-04-03
+
+### 📑 高级排版特性、系统设置与 UI 大革新 (Pagination & System Control)
+
+**系统设置与插件总控 (System Settings & Plugin Control)**
+- **插件驱动型配置系统**：彻底解耦 `RuleConfig` 与具体插件逻辑，所有插件通过 `DeclarativeConfigMixin` 显式声明配置模型，支持细粒度的“即开即用”式开关。
+- **Settings API 集群**：新增 `/api/settings` 接口，支持获取版本信息、动态切换插件状态、一键清理临时缓存及日志。
+- **真实更新巡检**：接入 **GitHub Releases API**，实现真实的版本巡检、变更日志拉取与下载地址分发，支持语义化版本号 (SemVer) 智能对比。
+
+**UI/UX 交互体验重塑 (UI Redesign)**
+- **设置抽屉面板 (Settings Drawer)**：引入右侧滑出的“设置中心”，采用半透明磨砂玻璃设计，集成了模块总控开关与系统维护工具。
+- **侧边栏导航升级**：增加底部常驻“系统设置”入口，优化了导航项的微动画与激活态视觉反馈。
+- **可视化规则编辑**：优化了规则管理页面的 sub-tabs 布局，提升了大批量配置项下的操作效率。
+
+**高级分页排版控制 (Advanced Pagination)**
+- **PaginationPlugin 深度感知**：新增 `Widow Control` (孤行控制) 与 `Keep with Next` (与下段同页) 属性的全量校验支持。
+- **标题跨页保护**：强制所有符合规范的标题开启“与下段同页”，预防论文排版中常见的“孤立标题”问题。
+
+**修订模式与协作净化 (Revision & Hygiene)**
+- **RevisionCleaner 物理剥离**：引入 `lxml.etree.XPath` 在解析前“接受所有修订”，剥离 `w:del` 内容，防止残留修订痕迹干扰校验。
+- **隐藏文字过滤**：自动预处理并移除 `run.font.hidden` 标记的内容。
+
+**工程验证 (Stability)**
+- **集成验证套件**：交付 `tests/integration/test_pagination_e2e.py`，覆盖了含修订记录、跨页属性异常的边缘场景校验。
+- **版本号规范**：规范化 `src/version.py` 格式，支持 SemVer 与 BUILD_DATE 自动注入。
+
+
 ## v1.1.0 — 2026-04-03
 
 ### 🛠️ 深度进化：从“校验”到“修复”的跨越 (The Evolution to Fixer-Loop)

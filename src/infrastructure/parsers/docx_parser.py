@@ -16,11 +16,13 @@ P0 重构要点（2026-04-03）：
 """
 from __future__ import annotations
 import docx
+import io
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from domain.models import ParagraphNode, TextRunNode, SectionNode
+from domain.models import ParagraphNode, TextRunNode, SectionNode, DocumentModel
 from domain.utils.unit_converter import UnitConverter
 from domain.interfaces import IParser
 from infrastructure.parsers.style_resolver import StyleResolver
+from infrastructure.parsers.revision_cleaner import RevisionCleaner
 
 # Word XML 命名空间
 _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -56,10 +58,15 @@ class DocxParser(IParser):
     实现 IParser 接口，use_cases 层通过接口调用，不直接依赖此类。
     """
 
-    def __init__(self, filepath: str):
-        self._filepath = filepath
+    def __init__(self, doc_stream: io.BytesIO, clean_revisions: bool = True):
         # python-docx 对象只在此类内部存在，不泄露到其他层
-        self._doc = docx.Document(filepath)
+        self._doc = docx.Document(doc_stream)
+        
+        # ── P2: 开启修订模式屏蔽与垃圾清理 ──────────────────────────────────
+        if clean_revisions:
+            RevisionCleaner.accept_all_revisions(self._doc)
+            RevisionCleaner.strip_hidden_text(self._doc)
+            
         # P0 新增：预构建 StyleResolver，供 _parse_runs 回退查询
         self._resolver = StyleResolver(self._doc)
 
@@ -114,6 +121,11 @@ class DocxParser(IParser):
 
         runs = self._parse_runs(para, style_name)
 
+        # ── 分页属性解析 ────────────────────────────────────────────────────────
+        widow_control  = pf.widow_control  if (pf and pf.widow_control  is not None) else self._resolver.get_computed_widow_control(style_name)
+        keep_with_next = pf.keep_with_next if (pf and pf.keep_with_next is not None) else self._resolver.get_computed_keep_with_next(style_name)
+        keep_together  = pf.keep_together  if (pf and pf.keep_together  is not None) else self._resolver.get_computed_keep_together(style_name)
+
         # 若段落没有有效文字内容（仅空白 run），且不是标题/题注样式则跳过
         if not stripped:
             is_structural = (
@@ -134,6 +146,9 @@ class DocxParser(IParser):
             first_line_indent_chars=indent_chars,
             space_before_pt=space_before,
             space_after_pt=space_after,
+            widow_control=widow_control,
+            keep_with_next=keep_with_next,
+            keep_together=keep_together,
             runs=runs,
         )
 

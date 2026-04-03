@@ -9,24 +9,38 @@ P0 重构（2026-04-03）：
 """
 from __future__ import annotations
 from typing import List, Optional
+from pydantic import BaseModel
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext,
     DocumentSection
 )
 from domain.interfaces import BaseRulePlugin
-from use_cases.rule_config import ValidatorsConfig
+from use_cases.plugins.mixin import DeclarativeConfigMixin
+from use_cases.rule_config import RuleConfig
 
 
-class HierarchyPlugin(BaseRulePlugin):
+class HierarchyConfig(BaseModel):
+    """标题层级校验配置。"""
+    enabled: bool = True
+
+
+class ReferencesConfig(BaseModel):
+    """参考文献校验配置。"""
+    enabled: bool = True
+
+
+class HierarchyPlugin(BaseRulePlugin, DeclarativeConfigMixin):
     """
     检查标题层级是否跳级（E008）。
     不维护自身状态，通过 context.last_heading_level 获取上一层级。
 
     P0 变更：接受 StyleMapper 注入，消除 startsWith 硬编码。
     """
+    plugin_id = "hierarchy"
+    config_model = HierarchyConfig
 
-    def __init__(self, validators_cfg: ValidatorsConfig, style_mapper=None):
-        self.cfg = validators_cfg
+    def __init__(self, config: RuleConfig, style_mapper=None):
+        self.config = config
         # style_mapper 是 ValidatorPipeline.StyleMapper 实例
         # 使用 Any 类型避免循环导入（use_cases 内部互相导入）
         self._mapper = style_mapper
@@ -45,7 +59,7 @@ class HierarchyPlugin(BaseRulePlugin):
 
     def check(self, node: ParagraphNode, context: RuleContext) -> List[Issue]:
         issues: List[Issue] = []
-        if not self.cfg.check_hierarchy:
+        if not self.config.hierarchy.enabled:
             return issues
 
         current = self._get_level(node.style_name)
@@ -67,20 +81,21 @@ class HierarchyPlugin(BaseRulePlugin):
         return issues
 
 
-class ReferencesPlugin(BaseRulePlugin):
+class ReferencesPlugin(BaseRulePlugin, DeclarativeConfigMixin):
     """
     检查参考文献格式（W005）。
     依赖 context.in_references 判断当前是否在参考文献区域。
-    （in_references 由 ValidatorPipeline 状态机驱动，已修复跨章节泄露问题）
     """
+    plugin_id = "references"
+    config_model = ReferencesConfig
 
-    def __init__(self, validators_cfg: ValidatorsConfig, style_mapper=None):
-        self.cfg = validators_cfg
+    def __init__(self, config: RuleConfig, style_mapper=None):
+        self.config = config
         self._mapper = style_mapper  # 保留签名一致性，此 Plugin 暂不使用
 
     def check(self, node: ParagraphNode, context: RuleContext) -> List[Issue]:
         issues: List[Issue] = []
-        if not self.cfg.check_gb7714:
+        if not self.config.references.enabled:
             return issues
         if not context.in_references:
             return issues

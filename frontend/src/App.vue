@@ -1,3 +1,4 @@
+<script setup>
 import { ref, computed, onMounted } from 'vue'
 
 // ── API Configuration (P5: Dynamic Handshake) ───────────────────────────────
@@ -43,6 +44,14 @@ const exporting = ref(false)
 const fixing = ref(false)
 const isEditingRules = ref(false)
 const fullRules = ref(null)
+const rulesSubTab = ref('general')
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+const isSettingsOpen = ref(false)
+const systemSettings = ref(null)
+const isSettingsLoading = ref(false)
+const isCheckingUpdate = ref(false)
+const updateInfo = ref(null)
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const errorCount = computed(() => issues.value.filter(i => i.type === 'Error').length)
@@ -211,9 +220,14 @@ const toggleEditRules = async () => {
       const res = await fetchWithAuth(`${API.value}/api/rules/full_json`)
       fullRules.value = await res.json()
       // Ensure nested keys exist for reactive binding
-      if (!fullRules.value.validators) fullRules.value.validators = { check_hierarchy: true, check_gb7714: true }
+      if (!fullRules.value.validators) fullRules.value.validators = { check_font: true, check_spacing: true, check_hierarchy: true, check_gb7714: true }
       if (!fullRules.value.page_setup) fullRules.value.page_setup = { top_margin_cm: 2.54, bottom_margin_cm: 2.54, left_margin_cm: 3.18, right_margin_cm: 3.18 }
+      if (!fullRules.value.pagination) fullRules.value.pagination = { enabled: true, widow_control: true, keep_with_next_styles: ["Heading 1", "Heading 2", "Heading 3", "标题 1", "标题 2", "标题 3"] }
+      if (fullRules.value.pagination.keep_with_next_styles) {
+        fullRules.value.pagination.keep_with_next_styles_str = fullRules.value.pagination.keep_with_next_styles.join(', ')
+      }
       isEditingRules.value = true
+      rulesSubTab.value = 'general'
     } catch (err) {
       alert("加载完整规则失败：" + err.message)
     } finally {
@@ -343,6 +357,64 @@ const showToast = (msg) => {
   setTimeout(() => { toast.value = null }, 2800)
 }
 
+// ── Settings API ─────────────────────────────────────────────────────────────
+const loadSystemSettings = async () => {
+  isSettingsLoading.value = true
+  try {
+    const res = await fetchWithAuth(`${API.value}/api/settings`)
+    systemSettings.value = await res.json()
+  } catch (err) {
+    console.error("加载设置失败", err)
+  } finally {
+    isSettingsLoading.value = false
+  }
+}
+
+const togglePlugin = async (plugin) => {
+  try {
+    const res = await fetchWithAuth(`${API.value}/api/settings/plugin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: plugin.id, enabled: !plugin.enabled })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    plugin.enabled = !plugin.enabled
+    showToast(`${plugin.name} 状态已更新`)
+  } catch (err) {
+    alert("更新失败: " + err.message)
+  }
+}
+
+const clearSystemCache = async () => {
+  if (!confirm('确认清理所有系统缓存和旧日志？')) return
+  try {
+    const res = await fetchWithAuth(`${API.value}/api/settings/clear_cache`, { method: 'POST' })
+    const data = await res.json()
+    showToast(`清理成功: 已删除 ${data.deleted_items} 个项`)
+    await loadSystemSettings()
+  } catch (err) {
+    alert("清理失败: " + err.message)
+  }
+}
+
+const checkUpdate = async () => {
+  isCheckingUpdate.value = true
+  updateInfo.value = null
+  try {
+    const res = await fetchWithAuth(`${API.value}/api/settings/check_update`)
+    updateInfo.value = await res.json()
+  } catch (err) {
+    alert("检查更新失败")
+  } finally {
+    isCheckingUpdate.value = false
+  }
+}
+
+const openSettings = () => {
+  isSettingsOpen.value = true
+  loadSystemSettings()
+}
+
 // ── Utility ────────────────────────────────────────────────────────────────────
 const levelColor = (level) => {
   if (level === 'ERROR') return '#f87171'
@@ -383,6 +455,13 @@ const levelColor = (level) => {
       <button class="nav-item" :class="{ active: activeTab === 'logs' }" @click="switchTab('logs')">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><polyline points="14 2 14 8 20 8"></polyline></svg>
         系统日志
+      </button>
+
+      <div style="flex:1"></div>
+
+      <button class="nav-item" @click="openSettings" style="margin-top:auto">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        系统设置
       </button>
     </nav>
 
@@ -519,88 +598,128 @@ const levelColor = (level) => {
         </div>
 
         <div v-if="isEditingRules && fullRules" class="rules-editor fade-in">
-           <!-- Form for document defaults -->
-           <div class="editor-section">
-             <div class="section-badge">基础设置</div>
-             <h3>全局默认格式 (Document)</h3>
-             <div class="editor-grid">
-               <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="fullRules.document.default_font_east_asia"/></div>
-               <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="fullRules.document.default_font_ascii"/></div>
-               <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" v-model.number="fullRules.document.default_font_size"/></div>
-               <div class="form-row"><label>行距</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.document.default_line_spacing"/></div>
-             </div>
+           <!-- ── Segmented Control / Sub Tabs ── -->
+           <div class="segmented-control">
+             <button class="seg-item" :class="{ active: rulesSubTab === 'general' }" @click="rulesSubTab = 'general'">常规设置</button>
+             <button class="seg-item" :class="{ active: rulesSubTab === 'headings' }" @click="rulesSubTab = 'headings'">多级标题</button>
+             <button class="seg-item" :class="{ active: rulesSubTab === 'content' }" @click="rulesSubTab = 'content'">正文/备注</button>
+             <button class="seg-item" :class="{ active: rulesSubTab === 'advanced' }" @click="rulesSubTab = 'advanced'">高阶插件</button>
            </div>
 
-           <!-- Multi-level validators -->
-           <div class="editor-section">
-             <div class="section-badge">高阶规则</div>
-             <h3>高级验证器 (Validators)</h3>
-             <div class="editor-flex-row">
-               <label class="toggle-label"><input type="checkbox" v-model="fullRules.validators.check_hierarchy"/> 启用标题层级审查 (拦截伪造/跳段标题)</label>
-               <label class="toggle-label"><input type="checkbox" v-model="fullRules.validators.check_gb7714"/> 启用 GB/T 7714 参考文献格式验证</label>
-             </div>
-           </div>
-           
-           <div class="editor-section">
-             <div class="section-badge">页面</div>
-             <h3>页面布局 (Page Setup)</h3>
-             <div class="editor-grid">
-               <div class="form-row"><label>上边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.top_margin_cm"/></div>
-               <div class="form-row"><label>下边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.bottom_margin_cm"/></div>
-               <div class="form-row"><label>左边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.left_margin_cm"/></div>
-               <div class="form-row"><label>右边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.right_margin_cm"/></div>
-             </div>
-           </div>
-
-           <!-- Headings -->
-           <div class="editor-section" v-if="fullRules.headings">
-             <div class="section-badge">多级标题</div>
-             <h3>标题样式定义 (Headings)</h3>
-             <div v-for="(hRule, hKey) in fullRules.headings" :key="hKey" class="sub-editor" style="margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px dashed rgba(255,255,255,0.1)">
-               <h4 style="margin-top:0; color:#cbd5e1; font-size:1rem">{{ hRule.name || hKey }}</h4>
+           <!-- Tab: General -->
+           <div v-if="rulesSubTab === 'general'" class="tab-content-fade">
+             <div class="editor-section">
+               <div class="section-badge">基础设置</div>
+               <h3>全局默认格式 (Document)</h3>
                <div class="editor-grid">
-                 <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="hRule.font_east_asia"/></div>
-                 <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="hRule.font_ascii"/></div>
-                 <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.font_size"/></div>
-                 <div class="form-row"><label>段前间距(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.space_before"/></div>
-                 <div class="form-row"><label>段后间距(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.space_after"/></div>
-                 <div class="form-row"><label>对齐方式</label>
-                   <select class="editor-input" v-model="hRule.alignment">
-                     <option value="left">靠左对齐 (Left)</option>
-                     <option value="center">居中对齐 (Center)</option>
-                     <option value="right">靠右对齐 (Right)</option>
-                     <option value="justify">两端对齐 (Justify)</option>
-                   </select>
-                 </div>
-                 <label class="toggle-label" style="align-self:flex-end; padding-bottom:0.5rem;"><input type="checkbox" v-model="hRule.bold"/> 粗体 (Bold)</label>
+                 <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="fullRules.document.default_font_east_asia"/></div>
+                 <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="fullRules.document.default_font_ascii"/></div>
+                 <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" v-model.number="fullRules.document.default_font_size"/></div>
+                 <div class="form-row"><label>行距</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.document.default_line_spacing"/></div>
+               </div>
+             </div>
+
+             <div class="editor-section">
+               <div class="section-badge">页面</div>
+               <h3>页面布局 (Page Setup)</h3>
+               <div class="editor-grid">
+                 <div class="form-row"><label>上边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.top_margin_cm"/></div>
+                 <div class="form-row"><label>下边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.bottom_margin_cm"/></div>
+                 <div class="form-row"><label>左边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.left_margin_cm"/></div>
+                 <div class="form-row"><label>右边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.right_margin_cm"/></div>
                </div>
              </div>
            </div>
 
-           <!-- Paragraphs & Captions -->
-           <div class="editor-section" v-if="fullRules.paragraphs">
-             <div class="section-badge">正文/题注</div>
-             <h3>段落与图表注样式</h3>
-             <template v-for="collection in [fullRules.paragraphs, fullRules.captions]">
-               <div v-for="(pRule, pKey) in collection" :key="pKey" class="sub-editor" style="margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px dashed rgba(255,255,255,0.1)">
-                 <h4 style="margin-top:0; color:#cbd5e1; font-size:1rem">{{ pRule.name || pKey }}</h4>
+           <!-- Tab: Headings -->
+           <div v-if="rulesSubTab === 'headings'" class="tab-content-fade">
+             <div class="editor-section" v-if="fullRules.headings">
+               <div class="section-badge">多级标题</div>
+               <h3>标题样式定义 (Headings)</h3>
+               <div v-for="(hRule, hKey) in fullRules.headings" :key="hKey" class="sub-editor" style="margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px dashed rgba(255,255,255,0.1)">
+                 <h4 style="margin-top:0; color:#cbd5e1; font-size:1rem">{{ hRule.name || hKey }}</h4>
                  <div class="editor-grid">
-                   <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="pRule.font_east_asia"/></div>
-                   <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="pRule.font_ascii"/></div>
-                   <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="pRule.font_size"/></div>
-                   <div class="form-row"><label>首行缩进(字符)</label><input class="editor-input" type="number" v-model.number="pRule.first_line_indent"/></div>
+                   <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="hRule.font_east_asia"/></div>
+                   <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="hRule.font_ascii"/></div>
+                   <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.font_size"/></div>
+                   <div class="form-row"><label>段前间距(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.space_before"/></div>
+                   <div class="form-row"><label>段后间距(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.space_after"/></div>
                    <div class="form-row"><label>对齐方式</label>
-                     <select class="editor-input" v-model="pRule.alignment">
+                     <select class="editor-input" v-model="hRule.alignment">
                        <option value="left">靠左对齐</option>
                        <option value="center">居中对齐</option>
                        <option value="right">靠右对齐</option>
                        <option value="justify">两端对齐</option>
                      </select>
                    </div>
-                   <label class="toggle-label" style="align-self:flex-end; padding-bottom:0.5rem;"><input type="checkbox" v-model="pRule.bold"/> 粗体</label>
+                   <label class="toggle-label" style="align-self:flex-end; padding-bottom:0.5rem;"><input type="checkbox" v-model="hRule.bold"/> 粗体 (Bold)</label>
                  </div>
                </div>
-             </template>
+             </div>
+           </div>
+
+           <!-- Tab: Content -->
+           <div v-if="rulesSubTab === 'content'" class="tab-content-fade">
+             <div class="editor-section">
+               <div class="section-badge">正文/题注</div>
+               <h3>正文与图表注样式</h3>
+               <template v-for="collection in [fullRules.paragraphs, fullRules.captions]">
+                 <div v-for="(pRule, pKey) in collection" :key="pKey" class="sub-editor" style="margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px dashed rgba(255,255,255,0.1)">
+                   <h4 style="margin-top:0; color:#cbd5e1; font-size:1rem">{{ pRule.name || pKey }}</h4>
+                   <div class="editor-grid">
+                     <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="pRule.font_east_asia"/></div>
+                     <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="pRule.font_ascii"/></div>
+                     <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="pRule.font_size"/></div>
+                     <div class="form-row"><label>首行缩进(字符)</label><input class="editor-input" type="number" v-model.number="pRule.first_line_indent"/></div>
+                     <div class="form-row"><label>对齐方式</label>
+                       <select class="editor-input" v-model="pRule.alignment">
+                         <option value="left">靠左对齐</option>
+                         <option value="center">居中对齐</option>
+                         <option value="right">靠右对齐</option>
+                         <option value="justify">两端对齐</option>
+                       </select>
+                     </div>
+                     <label class="toggle-label" style="align-self:flex-end; padding-bottom:0.5rem;"><input type="checkbox" v-model="pRule.bold"/> 粗体</label>
+                   </div>
+                 </div>
+               </template>
+             </div>
+           </div>
+
+           <!-- Tab: Advanced / Plugins -->
+           <div v-if="rulesSubTab === 'advanced'" class="tab-content-fade">
+             <!-- Pagination Plugin -->
+             <div class="editor-section">
+               <div class="section-badge">Plugin: Pagination</div>
+               <div class="section-header-row">
+                 <h3>分页与排版细节</h3>
+                 <label class="master-toggle">
+                   <input type="checkbox" v-model="fullRules.pagination.enabled" />
+                   <span class="toggle-track"></span>
+                   <span class="toggle-label-text">开启功能模块</span>
+                 </label>
+               </div>
+               <p class="section-hint">管理论文中的孤行控制、与下段同页、禁止段内分页等高级分页逻辑。</p>
+               <div class="editor-grid" v-if="fullRules.pagination.enabled">
+                 <label class="toggle-label"><input type="checkbox" v-model="fullRules.pagination.widow_control"/> 开启基础孤行控制 (E009)</label>
+                 <div class="form-row">
+                   <label>样式穿透 (Keep with next)</label>
+                   <input class="editor-input" v-model="fullRules.pagination.keep_with_next_styles_str" placeholder="样式名称，逗号分隔" @blur="fullRules.pagination.keep_with_next_styles = (fullRules.pagination.keep_with_next_styles_str || '').split(',').map(s=>s.trim())"/>
+                 </div>
+               </div>
+             </div>
+
+             <!-- Older Validators -->
+             <div class="editor-section">
+               <div class="section-badge">分析器总控</div>
+               <h3>高阶验证逻辑 (Validators)</h3>
+               <div class="editor-flex-row">
+                 <label class="toggle-label"><input type="checkbox" v-model="fullRules.validators.check_font"/> 启用字体/字号格式检查 (P0 Core)</label>
+                 <label class="toggle-label"><input type="checkbox" v-model="fullRules.validators.check_spacing"/> 启用段落间距/缩进检查 (P1 Core)</label>
+                 <label class="toggle-label" style="margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid rgba(255,255,255,0.05)"><input type="checkbox" v-model="fullRules.validators.check_hierarchy"/> 启用标题层级审查 (拦截伪造/跳段标题)</label>
+                 <label class="toggle-label"><input type="checkbox" v-model="fullRules.validators.check_gb7714"/> 启用 GB/T 7714 参考文献格式验证</label>
+               </div>
+             </div>
            </div>
         </div>
 
@@ -670,6 +789,86 @@ const levelColor = (level) => {
         </div>
       </div>
     </main>
+
+    <!-- ── Settings Overlay ── -->
+    <div v-if="isSettingsOpen" class="settings-overlay" @click.self="isSettingsOpen = false">
+      <div class="settings-panel fade-in-right">
+        <div class="settings-header">
+          <h2>系统设置</h2>
+          <button class="close-btn" @click="isSettingsOpen = false">×</button>
+        </div>
+
+        <div v-if="isSettingsLoading" class="settings-loader">
+          <div class="spinner"></div>
+        </div>
+
+        <div v-else-if="systemSettings" class="settings-body">
+          <!-- Plugin Toggles -->
+          <section class="settings-section">
+            <h3 class="section-title">模块启用管理</h3>
+            <div class="plugin-toggles">
+              <div v-for="p in systemSettings.plugins" :key="p.id" class="plugin-row">
+                <div class="plugin-info">
+                  <span class="plugin-name">{{ p.name }}</span>
+                  <span class="plugin-id">{{ p.id }}</span>
+                </div>
+                <label class="master-toggle">
+                  <input type="checkbox" :checked="p.enabled" @change="togglePlugin(p)" />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <!-- System Info -->
+          <section class="settings-section">
+            <h3 class="section-title">系统信息</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="label">软件版本</span>
+                <span class="val">{{ systemSettings.version }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">编译日期</span>
+                <span class="val">{{ systemSettings.build_date }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">规则文件</span>
+                <span class="val">{{ systemSettings.rules_file }}</span>
+              </div>
+            </div>
+            
+            <div class="update-check">
+              <button class="btn btn-ghost" :disabled="isCheckingUpdate" @click="checkUpdate">
+                {{ isCheckingUpdate ? '正在检查...' : '检查更新' }}
+              </button>
+              <div v-if="updateInfo" class="update-status">
+                <div v-if="updateInfo.has_update" class="has-update">
+                  <p>发现新版本 {{ updateInfo.latest }}</p>
+                  <span class="changelog">{{ updateInfo.changelog }}</span>
+                  <a :href="updateInfo.download_url" target="_blank" class="btn btn-primary" style="margin-top:0.8rem; display:inline-block; font-size:0.8rem; padding:6px 12px">
+                    🚀 去 GitHub 下载更新
+                  </a>
+                </div>
+                <p v-else class="no-update">当前已是最新版本</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Maintenance -->
+          <section class="settings-section">
+            <h3 class="section-title">系统维护</h3>
+            <div class="maintenance-box">
+              <div class="cache-info">
+                <span class="label">临时文件大小</span>
+                <span class="val">{{ systemSettings.cache_size_mb }} MB</span>
+              </div>
+              <button class="btn btn-ghost" style="color:#f87171" @click="clearSystemCache">🗑 一键清理缓存</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -687,6 +886,97 @@ const levelColor = (level) => {
 .editor-flex-row { display: flex; flex-direction: column; gap: 0.8rem; }
 .toggle-label { display: flex; align-items: center; gap: 0.5rem; color: #cbd5e1; font-size: 0.95rem; cursor: pointer; }
 .toggle-label input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: #6366f1; }
+
+/* ── Segmented Control ── */
+.segmented-control {
+  display: flex;
+  background: rgba(15,23,42,0.6);
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  border: 1px solid rgba(255,255,255,0.05);
+  width: fit-content;
+}
+
+.seg-item {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.seg-item:hover { color: #94a3b8; }
+.seg-item.active {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.tab-content-fade {
+  animation: tabFade 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@keyframes tabFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── Master Toggle ── */
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.2rem;
+}
+
+.section-hint {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.master-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  cursor: pointer;
+}
+
+.master-toggle input { display: none; }
+
+.toggle-track {
+  width: 40px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  position: relative;
+  transition: background 0.3s;
+}
+
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.master-toggle input:checked + .toggle-track { background: #6366f1; }
+.master-toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+.toggle-label-text { font-size: 0.85rem; color: #818cf8; font-weight: 600; }
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 .app-shell {
@@ -947,4 +1237,66 @@ const levelColor = (level) => {
 
 .fade-in { animation: fadeIn 0.4s ease forwards; }
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+/* ── Settings Panel Styles ── */
+.settings-overlay {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
+  z-index: 1000; display: flex; justify-content: flex-end;
+}
+
+.settings-panel {
+  width: 400px; height: 100%; background: #111827;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  display: flex; flex-direction: column; overflow-y: auto;
+  box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+}
+
+.settings-header {
+  padding: 1.5rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+.settings-header h2 { margin: 0; font-size: 1.3rem; color: #f1f5f9; }
+.close-btn { background: none; border: none; font-size: 2rem; color: #64748b; cursor: pointer; line-height: 1; }
+
+.settings-body { padding: 2rem; display: flex; flex-direction: column; gap: 2.5rem; }
+
+.section-title {
+  font-size: 0.85rem; color: #4f46e5; text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 700; margin-bottom: 1.2rem;
+  padding-bottom: 0.5rem; border-bottom: 1px solid rgba(79,70,229,0.2);
+}
+
+.plugin-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.8rem 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.plugin-info { display: flex; flex-direction: column; gap: 0.2rem; }
+.plugin-name { font-size: 0.95rem; color: #e2e8f0; font-weight: 500; }
+.plugin-id { font-size: 0.75rem; color: #475569; font-family: monospace; }
+
+.info-grid { display: grid; gap: 1rem; margin-bottom: 1.5rem; }
+.info-item { display: flex; justify-content: space-between; font-size: 0.9rem; }
+.info-item .label { color: #64748b; }
+.info-item .val { color: #cbd5e1; font-weight: 500; }
+
+.update-check {
+  background: rgba(255,255,255,0.02); padding: 1.2rem; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+
+.update-status { font-size: 0.88rem; }
+.has-update { color: #fbbf24; line-height: 1.4; }
+.changelog { font-size: 0.75rem; color: #94a3b8; white-space: pre-wrap; display: block; margin-top: 0.4rem; }
+.no-update { color: #4ade80; }
+
+.maintenance-box { display: flex; justify-content: space-between; align-items: center; }
+.cache-info .val { font-size: 1rem; display: block; color: #e11d48; margin-top: 0.2rem; }
+
+.settings-loader { flex: 1; display: flex; justify-content: center; align-items: center; }
+
+.fade-in-right { animation: fadeInRight 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes fadeInRight { from { opacity: 0; transform: translateX(50px); } to { opacity: 1; transform: none; } }
 </style>

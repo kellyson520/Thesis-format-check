@@ -92,13 +92,16 @@ class _StyleEntry:
     单个 Word 样式的计算属性（经过继承链合并后的最终值）。
     属性为 None 表示该层未定义，向上层查找。
     """
-    __slots__ = ("bold", "size_pt", "ascii_font", "east_asia_font")
+    __slots__ = ("bold", "size_pt", "ascii_font", "east_asia_font", "widow_control", "keep_with_next", "keep_together")
 
     def __init__(self):
         self.bold: Optional[bool]          = None
         self.size_pt: Optional[float]      = None
         self.ascii_font: Optional[str]     = None
         self.east_asia_font: Optional[str] = None
+        self.widow_control: Optional[bool]  = None
+        self.keep_with_next: Optional[bool] = None
+        self.keep_together: Optional[bool]  = None
 
     def merge_from(self, child: "_StyleEntry") -> "_StyleEntry":
         """
@@ -111,6 +114,9 @@ class _StyleEntry:
         result.size_pt       = child.size_pt       if child.size_pt       is not None else self.size_pt
         result.ascii_font    = child.ascii_font    if child.ascii_font    is not None else self.ascii_font
         result.east_asia_font = child.east_asia_font if child.east_asia_font is not None else self.east_asia_font
+        result.widow_control  = child.widow_control  if child.widow_control  is not None else self.widow_control
+        result.keep_with_next = child.keep_with_next if child.keep_with_next is not None else self.keep_with_next
+        result.keep_together  = child.keep_together  if child.keep_together  is not None else self.keep_together
         return result
 
     def __repr__(self):
@@ -120,13 +126,33 @@ class _StyleEntry:
         )
 
 
-def _entry_from_rpr(rPr) -> _StyleEntry:
-    """从 <w:rPr> XML 元素提取属性，构造 _StyleEntry。"""
+def _read_ppr_bool(pPr, tag_name: str) -> Optional[bool]:
+    """从 <w:pPr> 读取布尔标记（通常无 val = True）。"""
+    if pPr is None: return None
+    el = pPr.find(qn(f"w:{tag_name}"))
+    if el is None: return None
+    # 大多数分页标记如 <w:widowControl/> 只要存在就是 True，除非 val="0"
+    val = el.get(qn("w:val"))
+    return False if val == "0" else True
+
+def _entry_from_style(style_el) -> _StyleEntry:
+    """从样式的 XML 元素中同时收集 <w:rPr> 和 <w:pPr> 属性。"""
     e = _StyleEntry()
-    e.bold           = _read_rpr_bold(rPr)
-    e.size_pt        = _read_rpr_size(rPr)
-    e.ascii_font     = _read_rpr_font_ascii(rPr)
-    e.east_asia_font = _read_rpr_font_east_asia(rPr)
+    if style_el is None: return e
+    
+    rPr = style_el.find(qn("w:rPr"))
+    if rPr is not None:
+        e.bold           = _read_rpr_bold(rPr)
+        e.size_pt        = _read_rpr_size(rPr)
+        e.ascii_font     = _read_rpr_font_ascii(rPr)
+        e.east_asia_font = _read_rpr_font_east_asia(rPr)
+    
+    pPr = style_el.find(qn("w:pPr"))
+    if pPr is not None:
+        e.widow_control  = _read_ppr_bool(pPr, "widowControl")
+        e.keep_with_next = _read_ppr_bool(pPr, "keepNext")
+        e.keep_together  = _read_ppr_bool(pPr, "keepLines")
+        
     return e
 
 
@@ -172,7 +198,7 @@ class StyleResolver:
                     rPr = rPr_el
             except Exception:
                 pass
-            raw[sname] = _entry_from_rpr(rPr)
+            raw[sname] = _entry_from_style(style.element)
             # 记录父样式名
             base = getattr(style, "base_style", None)
             parent_map[sname] = base.name if base else None
@@ -256,6 +282,18 @@ class StyleResolver:
     def get_computed_east_asia_font(self, style_name: str) -> Optional[str]:
         """返回给定样式的最终中文字体名。"""
         return self._get(style_name).east_asia_font
+
+    def get_computed_widow_control(self, style_name: str) -> Optional[bool]:
+        """返回给定样式的孤行控制状态。"""
+        return self._get(style_name).widow_control
+
+    def get_computed_keep_with_next(self, style_name: str) -> Optional[bool]:
+        """返回给定样式的与下段同页状态。"""
+        return self._get(style_name).keep_with_next
+
+    def get_computed_keep_together(self, style_name: str) -> Optional[bool]:
+        """返回给定样式的段内不分页状态。"""
+        return self._get(style_name).keep_together
 
     def get_computed_value(self, style_name: str, attr: str) -> Any:
         """

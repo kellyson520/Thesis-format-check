@@ -24,6 +24,9 @@ class IssueCode(str, Enum):
     CAPTION_SEQ    = "W004"  # 题注编号不连续
     HEADING_SKIP   = "E008"  # 标题跳级
     REF_FORMAT     = "W005"  # 参考文献格式
+    PAGINATION_WIDOW = "E009" # 孤行控制不符
+    PAGINATION_KWN   = "E010" # 与下段同页不符 (Keep with next)
+    PAGINATION_KT    = "E011" # 段内不分页不符 (Keep together)
 
 
 class IssueSeverity(str, Enum):
@@ -77,6 +80,10 @@ class ParagraphNode(BaseModel):
     first_line_indent_chars: float = 0.0  # 单位：字符数（UnitConverter 换算）
     space_before_pt: float = 0.0
     space_after_pt: float = 0.0
+    # Pagination — 高级排版特性 (P2 新增)
+    widow_control:   Optional[bool] = None  # 孤行控制
+    keep_with_next:  Optional[bool] = None  # 与下段同页
+    keep_together:   Optional[bool] = None  # 段内不分页
     runs: List[TextRunNode] = Field(default_factory=list)
 
 

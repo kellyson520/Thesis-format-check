@@ -21,6 +21,7 @@ from use_cases.plugins.font_plugin import FontPlugin
 from use_cases.plugins.spacing_plugin import SpacingPlugin
 from use_cases.plugins.hierarchy_plugin import HierarchyPlugin, ReferencesPlugin
 from use_cases.plugins.caption_seq_plugin import CaptionSeqPlugin
+from use_cases.plugins.pagination_plugin import PaginationPlugin
 from use_cases.plugins.page_margin_plugin import PageMarginPlugin
 
 
@@ -140,15 +141,16 @@ class ValidatorPipeline:
         return [
             FontPlugin(self.config),
             SpacingPlugin(self.config),
-            HierarchyPlugin(self.config.validators, self._style_mapper),
-            ReferencesPlugin(self.config.validators),
+            PaginationPlugin(self.config),
+            HierarchyPlugin(self.config, self._style_mapper),
+            ReferencesPlugin(self.config, self._style_mapper),
             CaptionSeqPlugin(),
         ]
 
     def _init_section_plugins(self) -> List[ISectionPlugin]:
         """初始化节级插件。"""
         return [
-            PageMarginPlugin(self.config.page_setup)
+            PageMarginPlugin(self.config)
         ]
 
     def run(

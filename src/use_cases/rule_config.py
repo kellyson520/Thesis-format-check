@@ -1,31 +1,50 @@
-"""
-Use Cases Layer — 强类型规则配置模型（Pydantic）
-规则：此模块只依赖 domain 层，禁止导入 docx / fastapi 等外部库。
-RuleLoader 在此层完成 YAML → Pydantic 的反序列化。
-"""
 from __future__ import annotations
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, model_validator
+from typing import Optional, Dict, Any, List, Type
+from pydantic import BaseModel, Field, create_model
 import yaml
 import json
 import os
-import copy
 
 
-# ─── 子规则模型 ───────────────────────────────────────────────────────────────
+# ─── 核心元模型 ─────────────────────────────────────────────────────────────
 
-class ParagraphRule(BaseModel):
-    """单个样式的格式规则，所有字段均有合理默认值。"""
-    name: str = ""
-    font_east_asia: Optional[str] = None
-    font_ascii: Optional[str] = None
-    font_size: Optional[float] = None          # 单位：pt
-    bold: Optional[bool] = None
-    alignment: Optional[str] = None            # "left" / "center" / "right" / "justify"
-    first_line_indent: Optional[float] = None  # 单位：字符数
-    line_spacing: Optional[float] = None       # 倍数 (e.g. 1.5) 或 pt
-    space_before: Optional[float] = None       # 单位：pt
-    space_after: Optional[float] = None        # 单位：pt
+class DocumentDefaults(BaseModel):
+    default_font_east_asia: str = "宋体"
+    default_font_ascii: str = "Times New Roman"
+    default_font_size: float = 12.0
+    default_line_spacing: float = 1.5
+
+
+class ValidatorsConfig(BaseModel):
+    """全局验证开关保持集中声明"""
+    check_font: bool = True
+    check_spacing: bool = True
+    check_hierarchy: bool = True
+    check_gb7714: bool = True
+
+
+# ─── 动态生成器 ─────────────────────────────────────────────────────────────
+
+def build_paragraph_rule_class() -> Type[BaseModel]:
+    """
+    从现有插件及其 Config 类动态组装 ParagraphRule。
+    遵循：所有设置均由插件显示声明。
+    """
+    from use_cases.plugins.font_plugin import FontConfig
+    from use_cases.plugins.spacing_plugin import SpacingConfig
+    
+    # 组合字段（扁平化以兼容现有 rules.yaml）
+    fields: Dict[str, Any] = {"name": (str, "")}
+    
+    for sub_config_cls in [FontConfig, SpacingConfig]:
+        for name, field in sub_config_cls.model_fields.items():
+            fields[name] = (field.annotation, field.default)
+            
+    return create_model("ParagraphRule", **fields)
+
+
+# 实例化动态模型
+ParagraphRule = build_paragraph_rule_class()
 
 
 class HeadingsConfig(BaseModel):
@@ -43,88 +62,76 @@ class CaptionsConfig(BaseModel):
     table_caption: Optional[ParagraphRule] = None
 
 
-class DocumentDefaults(BaseModel):
-    default_font_east_asia: str = "宋体"
-    default_font_ascii: str = "Times New Roman"
-    default_font_size: float = 12.0
-    default_line_spacing: float = 1.5
-
-
-class PageSetupConfig(BaseModel):
-    top_margin_cm: Optional[float] = None
-    bottom_margin_cm: Optional[float] = None
-    left_margin_cm: Optional[float] = None
-    right_margin_cm: Optional[float] = None
-
-
-class ValidatorsConfig(BaseModel):
-    check_hierarchy: bool = True
-    check_gb7714: bool = True
-
-
 # ─── 顶层规则配置（根节点） ───────────────────────────────────────────────────
 
-class RuleConfig(BaseModel):
+def build_rule_config_class() -> Type[BaseModel]:
     """
-    完整的规则配置对象。
-    加载失败时 Pydantic 会抛出 ValidationError，不会静默通过。
-    替代原来的脆弱字典取值，提供 IDE 类型安全与自动补全。
+    组装顶层 RuleConfig。
     """
-    document: DocumentDefaults = Field(default_factory=DocumentDefaults)
-    headings: HeadingsConfig = Field(default_factory=HeadingsConfig)
-    paragraphs: ParagraphsConfig = Field(default_factory=ParagraphsConfig)
-    captions: CaptionsConfig = Field(default_factory=CaptionsConfig)
-    page_setup: PageSetupConfig = Field(default_factory=PageSetupConfig)
-    validators: ValidatorsConfig = Field(default_factory=ValidatorsConfig)
-    # P0 新增：自定义样式映射 {"我的标题1": "level_1", "我的图注": "figure_caption"}
-    style_mapping: Dict[str, str] = Field(default_factory=dict)
+    from use_cases.plugins.pagination_plugin import PaginationConfig
+    from use_cases.plugins.page_margin_plugin import PageSetupConfig
 
+    # 基础字段
+    base_fields = {
+        "document": (DocumentDefaults, Field(default_factory=DocumentDefaults)),
+        "headings": (HeadingsConfig, Field(default_factory=HeadingsConfig)),
+        "paragraphs": (ParagraphsConfig, Field(default_factory=ParagraphsConfig)),
+        "captions": (CaptionsConfig, Field(default_factory=CaptionsConfig)),
+        "validators": (ValidatorsConfig, Field(default_factory=ValidatorsConfig)),
+        "style_mapping": (Dict[str, str], Field(default_factory=dict)),
+    }
+    
+    # 插件显式声明的顶层字段
+    base_fields["pagination"] = (PaginationConfig, Field(default_factory=PaginationConfig))
+    base_fields["page_setup"] = (PageSetupConfig, Field(default_factory=PageSetupConfig))
+
+    # 创建顶层类
+    DynamicRuleConfig = create_model("RuleConfig", **base_fields)
+
+    # 注入辅助方法（保持兼容性）
     def get_paragraph_rule(self, style_name: str) -> Optional[ParagraphRule]:
-        """
-        根据 Word 样式名称查找对应的格式规则。
-        使用 StyleMapper (逻辑上) 或配置的 style_mapping 进行解耦。
-        """
-        # 1. 检查自定义映射
         mapped_key = self.style_mapping.get(style_name)
         if mapped_key:
             return self._get_rule_by_key(mapped_key)
 
-        # 2. 回退到内置启发式逻辑 (解耦后使用 StyleMapper 相似逻辑)
         from use_cases.style_mapper import StyleMapper
-        mapper = StyleMapper() # 使用默认内置规则
-        
+        mapper = StyleMapper() 
         level = mapper.get_heading_level(style_name)
         if level == 1: return self.headings.level_1
         if level == 2: return self.headings.level_2
         if level == 3: return self.headings.level_3
-        
         if "Caption" in style_name or "题注" in style_name:
             if "Figure" in style_name or "图" in style_name:
                 return self.captions.figure_caption
             return self.captions.table_caption
-            
         return self.paragraphs.body_text
 
     def _get_rule_by_key(self, key: str) -> Optional[ParagraphRule]:
-        """通过 key (如 'level_1', 'body_text') 获取对应规则对象。"""
-        if key == "level_1": return self.headings.level_1
-        if key == "level_2": return self.headings.level_2
-        if key == "level_3": return self.headings.level_3
-        if key == "body_text": return self.paragraphs.body_text
-        if key == "figure_caption": return self.captions.figure_caption
-        if key == "table_caption": return self.captions.table_caption
-        return None
+        mapping = {
+            "level_1": self.headings.level_1,
+            "level_2": self.headings.level_2,
+            "level_3": self.headings.level_3,
+            "body_text": self.paragraphs.body_text,
+            "figure_caption": self.captions.figure_caption,
+            "table_caption": self.captions.table_caption,
+        }
+        return mapping.get(key)
+    
+    # 绑定方法
+    DynamicRuleConfig.get_paragraph_rule = get_paragraph_rule
+    DynamicRuleConfig._get_rule_by_key = _get_rule_by_key
+    
+    return DynamicRuleConfig
 
 
-# ─── 规则加载器 ───────────────────────────────────────────────────────────────
+# 暴露顶层类
+RuleConfig = build_rule_config_class()
+
 
 class RuleLoader:
     """
-    规则加载与管理器（Use Cases 层）。
-    输出：强类型的 RuleConfig（Pydantic），不再返回裸字典。
-    支持热重载、YAML/JSON 导入导出。
+    规则加载与管理器。
     """
-
     def __init__(self, filepath: str):
         self.filepath = filepath
         self._config: RuleConfig = self._load()
@@ -134,40 +141,24 @@ class RuleLoader:
             raise FileNotFoundError(f"规则文件未找到: {self.filepath}")
         with open(self.filepath, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
-        # Pydantic 自动校验：格式错误时立即抛出 ValidationError
         return RuleConfig.model_validate(raw)
 
     def reload(self) -> None:
-        """从当前 filepath 重新加载规则文件。"""
         self._config = self._load()
 
     def get_rules(self) -> RuleConfig:
-        """返回强类型规则配置对象。"""
         return self._config
 
     def import_from_yaml(self, yaml_content: str) -> dict:
-        """从 YAML 字符串导入规则（用于 API 文件上传）。"""
         try:
             raw = yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:
             raise ValueError(f"YAML 解析失败: {e}")
-        config = RuleConfig.model_validate(raw)  # 校验
-        with open(self.filepath, "w", encoding="utf-8") as f:
-            yaml.dump(raw, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-        self._config = config
-        return {"status": "ok", "message": f"规则已更新，共 {len(raw)} 个顶层节点"}
-
-    def import_from_json(self, json_content: str) -> dict:
-        """从 JSON 字符串导入规则。"""
-        try:
-            raw = json.loads(json_content)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"JSON 解析失败: {e}")
         config = RuleConfig.model_validate(raw)
         with open(self.filepath, "w", encoding="utf-8") as f:
             yaml.dump(raw, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
         self._config = config
-        return {"status": "ok", "message": "规则已从 JSON 格式更新"}
+        return {"status": "ok", "message": f"规则已更新"}
 
     def export_as_yaml(self) -> str:
         return yaml.dump(
@@ -184,16 +175,20 @@ class RuleLoader:
         doc = self._config.document
         return {
             "default_font_east_asia": doc.default_font_east_asia,
-            "default_font_ascii": doc.default_font_ascii,
             "default_font_size": doc.default_font_size,
-            "default_line_spacing": doc.default_line_spacing,
-            "heading_levels": [
-                k for k, v in self._config.headings.model_dump().items() if v
-            ],
-            "paragraph_styles": [
-                k for k, v in self._config.paragraphs.model_dump().items() if v
-            ],
-            "caption_styles": [
-                k for k, v in self._config.captions.model_dump().items() if v
-            ],
         }
+
+    def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> bool:
+        """
+        动态更新指定插件的启用状态并持久化。
+        """
+        if not hasattr(self._config, plugin_id):
+            return False
+            
+        plugin_cfg = getattr(self._config, plugin_id)
+        if hasattr(plugin_cfg, "enabled"):
+            plugin_cfg.enabled = enabled
+            # 持久化到文件
+            self.import_from_yaml(self.export_as_yaml())
+            return True
+        return False

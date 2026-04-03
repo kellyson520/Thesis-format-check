@@ -4,25 +4,36 @@ Plugin: 页边距检查（Section 级别）
 """
 from __future__ import annotations
 from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from domain.models import Issue, IssueCode, IssueSeverity, SectionNode, Patch
 from domain.interfaces import ISectionPlugin
-from use_cases.rule_config import PageSetupConfig
+from use_cases.plugins.mixin import DeclarativeConfigMixin
 
 
-class PageMarginPlugin(ISectionPlugin):
+class PageSetupConfig(BaseModel):
+    top_margin_cm: Optional[float] = None
+    bottom_margin_cm: Optional[float] = None
+    left_margin_cm: Optional[float] = None
+    right_margin_cm: Optional[float] = None
+
+
+class PageMarginPlugin(ISectionPlugin, DeclarativeConfigMixin):
     """检查页面边距（E001）。"""
+    plugin_id = "page_setup"
+    config_model = PageSetupConfig
 
     TOLERANCE_CM = 0.1  # 允许 0.1cm 的浮点误差
 
-    def __init__(self, page_setup: PageSetupConfig):
-        self.page_setup = page_setup
+    def __init__(self, config: RuleConfig):
+        self.config = config
 
     def check_sections(self, sections: List[SectionNode]) -> List[Issue]:
         issues: List[Issue] = []
         if not sections:
             return issues
         first = sections[0]
-        ps = self.page_setup
+        ps = self.config.page_setup
         checks = [
             ("top",    ps.top_margin_cm,    first.top_margin_cm),
             ("bottom", ps.bottom_margin_cm, first.bottom_margin_cm),

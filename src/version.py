@@ -1,3 +1,4 @@
-__version__ = "1.1.0"
-__app_name__ = "论文格式智能校验系统"
-__author__ = "kellyson520"
+# System Version
+VERSION = "1.2.0"
+BUILD_DATE = "2026-04-03"
+AUTHOR = "Antigravity Engineering"

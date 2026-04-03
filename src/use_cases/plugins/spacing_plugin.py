@@ -3,11 +3,13 @@ Plugin: 间距与缩进检查（E005/E006/E007/W002/W003）
 职责：检查段前间距、段后间距、行距、对齐方式、首行缩进。
 """
 from __future__ import annotations
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext, Patch
 )
 from domain.interfaces import BaseRulePlugin
+from use_cases.plugins.mixin import DeclarativeConfigMixin
 from use_cases.rule_config import RuleConfig
 
 
@@ -15,8 +17,20 @@ def _ctx(text: str, max_len: int = 25) -> str:
     return text[:max_len] + "..." if len(text) > max_len else text
 
 
-class SpacingPlugin(BaseRulePlugin):
+class SpacingConfig(BaseModel):
+    """间距与缩进校验所需参数。"""
+    enabled: bool = True
+    alignment: Optional[str] = None            # "left" / "center" / "right" / "justify"
+    first_line_indent: Optional[float] = None  # 单位：字符数
+    line_spacing: Optional[float] = None       # 倍数 (e.g. 1.5) 或 pt
+    space_before: Optional[float] = None       # 单位：pt
+    space_after: Optional[float] = None        # 单位：pt
+
+
+class SpacingPlugin(BaseRulePlugin, DeclarativeConfigMixin):
     """检查段前/段后间距（E005/E006）、行距（E007）、对齐（W002）、首行缩进（W003）。"""
+    plugin_id = "spacing"
+    config_model = SpacingConfig
 
     SPACING_TOL = 0.5   # pt 容差
     LS_TOL      = 0.1   # 行距容差
@@ -26,6 +40,8 @@ class SpacingPlugin(BaseRulePlugin):
 
     def check(self, node: ParagraphNode, context: RuleContext) -> List[Issue]:
         issues: List[Issue] = []
+        if not self.config.spacing.enabled:
+            return issues
         rule = self.config.get_paragraph_rule(node.style_name)
         if rule is None:
             return issues
