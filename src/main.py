@@ -3,6 +3,7 @@ import io
 import sys
 import json
 import threading
+import shutil
 import uvicorn
 import webview
 from datetime import datetime
@@ -13,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from docx import Document
 from docx.shared import RGBColor, Pt
+import tempfile
 
 from engine.rule_loader import RuleLoader
 from engine.validator import Validator
@@ -33,13 +35,23 @@ from engine.logger import AppLogger
 #   src/config/rules.yaml
 
 if getattr(sys, "frozen", False):
-    # PyInstaller 打包运行：使用 EXE 所在目录
+    # PyInstaller打包运行(--onefile)：内部绑定的静态文件解压到 sys._MEIPASS
+    app_root   = sys._MEIPASS
     base_dir   = os.path.dirname(sys.executable)
-    rules_path = os.path.join(base_dir, "config", "rules.yaml")
+    config_dir = os.path.join(base_dir, "config")
+    rules_path = os.path.join(config_dir, "rules.yaml")
     log_dir    = os.path.join(base_dir, "logs")
+    
+    # 支持完全独立的单一 EXE（不携带外部包）：如果没有 config 目录或 rules.yaml，从打包内存中复制一份默认的来用。
+    if not os.path.exists(rules_path):
+        os.makedirs(config_dir, exist_ok=True)
+        bundled_rules = os.path.join(app_root, "src", "config", "rules.yaml")
+        if os.path.exists(bundled_rules):
+            shutil.copy2(bundled_rules, rules_path)
 else:
     # 开发模式：使用项目根目录（src/main.py 向上两级）
     base_dir   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    app_root   = base_dir
     rules_path = os.path.join(base_dir, "src", "config", "rules.yaml")
     log_dir    = os.path.join(base_dir, "logs")
 
@@ -96,7 +108,7 @@ def _inject_comment_to_docx(source_path: str, issues: list) -> bytes:
 
 @app.post("/api/check")
 async def check_document(file: UploadFile = File(...)):
-    temp_dir = os.path.join(base_dir, "tests", "temp")
+    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, file.filename)
 
@@ -149,7 +161,7 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
     上传原始 docx + issues JSON，返回附批注的新 docx 文件流。
     前端可直接触发浏览器下载。
     """
-    temp_dir = os.path.join(base_dir, "tests", "temp")
+    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, f"_export_{file.filename}")
 
@@ -257,9 +269,18 @@ async def clear_logs():
 
 
 # ─── Static files (Production build) ─────────────────────────────────────────
-frontend_dist = os.path.join(base_dir, "frontend", "dist")
+frontend_dist = os.path.join(app_root, "frontend", "dist")
 if os.path.exists(frontend_dist):
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+else:
+    from fastapi.responses import HTMLResponse
+    @app.get("/")
+    async def index_fallback():
+        return HTMLResponse(
+            "<h1>前端未构建 (Frontend Not Built)</h1>"
+            "<p>请在 <code>frontend</code> 目录下运行 <code>npm install</code> 和 <code>npm run build</code>，然后重启当前程序。</p>"
+            "<p>Please run <code>npm install</code> and <code>npm run build</code> in the <code>frontend</code> directory, then restart the application.</p>"
+        )
 
 
 # ─── Server Bootstrap ─────────────────────────────────────────────────────────

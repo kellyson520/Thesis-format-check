@@ -151,23 +151,20 @@ jobs:
           # 复制 EXE
           Copy-Item "dist/ThesisFormatChecker.exe" "release_pkg/"
           
-          # 复制规则配置（用户可自定义）
-          New-Item -ItemType Directory -Force -Path "release_pkg/config"
-          Copy-Item "src/config/rules.yaml" "release_pkg/config/" -ErrorAction SilentlyContinue
-          
           # 创建使用说明 README
           @"
           # 论文格式智能校验 v${version}
           
           ## 快速开始
           直接双击 ThesisFormatChecker.exe 运行。
+          程序会在首次启动时自动生成默认规则文件 (config/rules.yaml)。
           
           ## 自定义规则
-          修改 config/rules.yaml 后重启程序即可生效。
+          修改生成的 config/rules.yaml 后重启程序即可生效。
           
           ## 系统要求
           - Windows 10/11 (64位)
-          - 无需安装 Python 或其他依赖
+          - 无需安装 Python 或其他环境
           "@ | Out-File -FilePath "release_pkg/README.txt" -Encoding UTF8
           
           # 打包为 ZIP
