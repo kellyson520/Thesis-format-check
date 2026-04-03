@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.2.2 — 2026-04-03
+## v1.2.3 — 2026-04-03
 
 ### 🔧 规则管理中心稳定性修复 (Rule Management Stability Fix)
 
