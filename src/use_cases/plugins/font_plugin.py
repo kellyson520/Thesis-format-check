@@ -3,7 +3,7 @@ Plugin: 字体检查（中文字体 E002 / 英文字体 E003 / 字号 E004 / 字
 职责：对段落内每个 Run 检查四类字体属性是否符合规则。
 """
 from __future__ import annotations
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from pydantic import BaseModel
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext, Patch
@@ -11,7 +11,9 @@ from domain.models import (
 from domain.interfaces import BaseRulePlugin
 from domain.utils.charset_detector import is_cjk_character, detect_text_charset
 from use_cases.plugins.mixin import DeclarativeConfigMixin
-from use_cases.rule_config import RuleConfig, DocumentDefaults
+
+if TYPE_CHECKING:
+    from use_cases.rule_config import RuleConfig, DocumentDefaults
 
 
 class FontConfig(BaseModel):

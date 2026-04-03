@@ -3,14 +3,16 @@ Plugin: 间距与缩进检查（E005/E006/E007/W002/W003）
 职责：检查段前间距、段后间距、行距、对齐方式、首行缩进。
 """
 from __future__ import annotations
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from pydantic import BaseModel
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext, Patch
 )
 from domain.interfaces import BaseRulePlugin
 from use_cases.plugins.mixin import DeclarativeConfigMixin
-from use_cases.rule_config import RuleConfig
+
+if TYPE_CHECKING:
+    from use_cases.rule_config import RuleConfig
 
 
 def _ctx(text: str, max_len: int = 25) -> str:

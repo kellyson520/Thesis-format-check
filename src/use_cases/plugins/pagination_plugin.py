@@ -3,14 +3,16 @@ Plugin: 分页排版控制（E009 孤行控制 / E010 与下段同页）
 职责：检查标题是否开启了“与下段同页”，正文是否开启了“孤行控制”。
 """
 from __future__ import annotations
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext, Patch
 )
 from domain.interfaces import BaseRulePlugin
 from use_cases.plugins.mixin import DeclarativeConfigMixin
-from use_cases.rule_config import RuleConfig
+
+if TYPE_CHECKING:
+    from use_cases.rule_config import RuleConfig
 
 
 class PaginationConfig(BaseModel):

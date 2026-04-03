@@ -6,6 +6,7 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 20260403_AlgorithmPrecision | 算法精度提升：基于语义分析的段落对齐与公式识别优化 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_AlgorithmPrecision/) |
 | 20260403_PaginationFeatures | Word高级排版特性检测：孤行控制/与下段同页 + 修订模式清理 | 2026-04-03 | - | 10% | [📂 查看](./Workstream_FormatCheck/20260403_PaginationFeatures/) |
+| 20260403_FixCircularImport_P0 | 修复循环引用：利用 TYPE_CHECKING 与延迟导入重构 RuleConfig & Plugin 加载链路 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_System/20260403_FixCircularImport_P0/) |
 | 20260403_AddSettingsFeature_P1 | 增加系统设置界面：开启/关闭插件、检查更新与版本展示 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_System/20260403_AddSettingsFeature_P1/) |
 
 

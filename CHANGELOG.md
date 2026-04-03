@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.1 — 2026-04-03
+
+### 🔧 稳定性增强与架构固化 (Stability & Architecture Fixes)
+
+**核心循环引用修复 (Circular Import Fix)**
+- **加载链路重构**：通过 `TYPE_CHECKING` 块与字符串延迟引用彻底解决了 `rule_config` 在动态构建模型时由于导入具体插件而引发的循环依赖（ImportError）。
+- **属性访问鲁棒化**：确保插件在 `__init__` 和 `check` 阶段即使在部分初始化状态下也能通过传入的 `config` 实例正常工作。
+
+**插件系统小计 (Plugin System Hygiene)**
+- **页边距插件加固**：补齐了 `PageMarginPlugin` 中缺失的 `RuleConfig` 类型标注，消除了静态分析告警。
+
 ## v1.2.0 — 2026-04-03
 
 ### 📑 高级排版特性、系统设置与 UI 大革新 (Pagination & System Control)

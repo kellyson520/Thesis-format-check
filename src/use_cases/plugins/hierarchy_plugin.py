@@ -8,7 +8,7 @@ P0 重构（2026-04-03）：
   - 参考文献检查仍依赖 context.in_references（由状态机保证正确）。
 """
 from __future__ import annotations
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from pydantic import BaseModel
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext,
@@ -16,7 +16,9 @@ from domain.models import (
 )
 from domain.interfaces import BaseRulePlugin
 from use_cases.plugins.mixin import DeclarativeConfigMixin
-from use_cases.rule_config import RuleConfig
+
+if TYPE_CHECKING:
+    from use_cases.rule_config import RuleConfig
 
 
 class HierarchyConfig(BaseModel):

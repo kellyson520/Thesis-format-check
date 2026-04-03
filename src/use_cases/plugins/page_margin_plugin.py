@@ -3,12 +3,14 @@ Plugin: 页边距检查（Section 级别）
 职责：检查文档各节的页边距是否符合配置规范。
 """
 from __future__ import annotations
-from typing import List
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from pydantic import BaseModel
 from domain.models import Issue, IssueCode, IssueSeverity, SectionNode, Patch
 from domain.interfaces import ISectionPlugin
 from use_cases.plugins.mixin import DeclarativeConfigMixin
+
+if TYPE_CHECKING:
+    from use_cases.rule_config import RuleConfig
 
 
 class PageSetupConfig(BaseModel):
