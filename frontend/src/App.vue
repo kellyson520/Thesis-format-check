@@ -577,23 +577,23 @@ const levelColor = (level) => {
           </div>
           <div class="rule-card">
             <h3>英文字体</h3>
-            <p class="rule-val">{{ rulesSummary.default_font_ascii }}</p>
+            <p class="rule-val">{{ rulesSummary.default_font_ascii || '未设置' }}</p>
           </div>
           <div class="rule-card">
             <h3>缺省字号</h3>
-            <p class="rule-val">{{ rulesSummary.default_font_size }} pt</p>
+            <p class="rule-val">{{ rulesSummary.default_font_size || '--' }} pt</p>
           </div>
           <div class="rule-card">
             <h3>行间距</h3>
-            <p class="rule-val">{{ rulesSummary.default_line_spacing }} 倍</p>
+            <p class="rule-val">{{ rulesSummary.default_line_spacing || '--' }} 倍</p>
           </div>
           <div class="rule-card wide">
             <h3>标题层级</h3>
-            <p class="rule-val">{{ rulesSummary.heading_levels.join(' / ') }}</p>
+            <p class="rule-val">{{ (rulesSummary.heading_levels || []).join(' / ') || '无' }}</p>
           </div>
           <div class="rule-card wide">
             <h3>段落样式</h3>
-            <p class="rule-val">{{ [...rulesSummary.paragraph_styles, ...rulesSummary.caption_styles].join(' / ') }}</p>
+            <p class="rule-val">{{ [...(rulesSummary.paragraph_styles || []), ...(rulesSummary.caption_styles || [])].join(' / ') || '无' }}</p>
           </div>
         </div>
 

@@ -14,6 +14,7 @@
 
 | 任务标识 | 任务描述 | 开始日期 | 结束日期 | 进度 | 传送门 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| 20260403_FixRuleManagementCrash_P0 | 修复规则管理功能：解决前端崩溃（页面纯色）与后端日志缺失问题 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_Frontend/20260403_FixRuleManagementCrash_P0/) |
 | 20260403_PluginDrivenConfig_P1 | 插件驱动配置系统重构：去中心化 Pydantic 模型 & 声明式配置声明 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_Standardization/20260403_PluginDrivenConfig_P1/) |
 | 20260403_AddReDetectButton_P1 | 增加重新检测功能按钮：支持已上传文件一键重校验 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_AddReDetectButton_P1/) |
 | 20260403_SetupStandardDirectory | 标准化目录初始化：整合架构、插件及开发规范 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_Standardization/20260403_SetupStandardDirectory_P1/) |

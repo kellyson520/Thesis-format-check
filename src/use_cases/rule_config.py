@@ -173,9 +173,20 @@ class RuleLoader:
 
     def get_summary(self) -> dict:
         doc = self._config.document
+        
+        # 动态提取已配置的样式名称
+        heading_names = [v.get('name') for v in self._config.headings.model_dump().values() if v and isinstance(v, dict) and v.get('name')]
+        para_names = [v.get('name') for v in self._config.paragraphs.model_dump().values() if v and isinstance(v, dict) and v.get('name')]
+        caption_names = [v.get('name') for v in self._config.captions.model_dump().values() if v and isinstance(v, dict) and v.get('name')]
+        
         return {
             "default_font_east_asia": doc.default_font_east_asia,
+            "default_font_ascii": doc.default_font_ascii,
             "default_font_size": doc.default_font_size,
+            "default_line_spacing": doc.default_line_spacing,
+            "heading_levels": heading_names or ["未定义标题"],
+            "paragraph_styles": para_names or ["未定义正文"],
+            "caption_styles": caption_names or ["未定义图表注"]
         }
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> bool:

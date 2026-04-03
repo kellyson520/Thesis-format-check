@@ -277,17 +277,28 @@ async def fix_document(file: UploadFile = File(...)):
 @app.get("/api/rules/summary")
 async def get_rules_summary():
     """返回当前生效规则摘要，用于前端卡片展示。"""
-    return JSONResponse(content=rule_loader.get_summary())
+    try:
+        summary = rule_loader.get_summary()
+        app_logger.info("获取规则摘要成功")
+        return JSONResponse(content=summary)
+    except Exception as e:
+        app_logger.error(f"获取规则摘要失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/rules/libraries")
 async def get_libraries():
     """获取所有可用的规则库 (.yaml)。"""
-    lib_dir = os.path.join(app_root, "config") if getattr(sys, "frozen", False) else os.path.join(app_root, "src", "config")
-    if not os.path.exists(lib_dir):
-        return JSONResponse(content={"libraries": [], "current": ""})
-    files = [f for f in os.listdir(lib_dir) if f.endswith(".yaml") or f.endswith(".yml")]
-    return JSONResponse(content={"libraries": files, "current": os.path.basename(rules_path)})
+    try:
+        lib_dir = os.path.join(app_root, "config") if getattr(sys, "frozen", False) else os.path.join(app_root, "src", "config")
+        if not os.path.exists(lib_dir):
+            return JSONResponse(content={"libraries": [], "current": ""})
+        files = [f for f in os.listdir(lib_dir) if f.endswith(".yaml") or f.endswith(".yml")]
+        app_logger.info(f"扫描规则库成功，发现 {len(files)} 个文件")
+        return JSONResponse(content={"libraries": files, "current": os.path.basename(rules_path)})
+    except Exception as e:
+        app_logger.error(f"获取规则库列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/rules/switch")
