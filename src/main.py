@@ -414,21 +414,34 @@ async def get_settings():
     """获取系统信息与插件列表状态。"""
     cfg = rule_loader.get_rules()
     
-    # 动态构建插件列表
+    # 动态构建插件列表（显式声明 + 集中总控）
     plugins = []
     plugin_display_names = {
-        "font": "字体格式校验",
-        "spacing": "段落间距校验",
-        "pagination": "Word 高级排版校验",
-        "hierarchy": "标题层级合法性",
-        "references": "GB/T 7714 参考文献"
+        "font":        "字体格式校验 (Font/Size)",
+        "spacing":     "段落间距校验 (Spacing/Indent)",
+        "pagination":  "分页控制插件 (Advanced Pagination)",
+        "page_setup":  "页面布局校验 (Margins)",
+        "hierarchy":   "标题层级审查 (Heading Levels)",
+        "references":  "参考文献校验 (GB/T 7714)",
+        "caption_seq": "题注连续性检查 (Caption Sequence)"
     }
     
+    # 扫描 RuleConfig 顶层属性，寻找带有 enabled 的插件
     for pid, name in plugin_display_names.items():
         if hasattr(cfg, pid):
             pcfg = getattr(cfg, pid)
             if hasattr(pcfg, "enabled"):
                 plugins.append({"id": pid, "name": name, "enabled": pcfg.enabled})
+    
+    # 也保留对原有 validators 对象的扫描（如果有遗漏或向下兼容）
+    if hasattr(cfg, "validators"):
+        for vid, v_enabled in cfg.validators.model_dump().items():
+            # 如果上面没处理过，或者这是内部 validator
+            plugin_id = vid.replace("check_", "")
+            found = any(p["id"] == plugin_id for p in plugins)
+            if not found:
+                display_name = plugin_display_names.get(plugin_id, f"内部验证器: {vid}")
+                plugins.append({"id": vid, "name": display_name, "enabled": v_enabled})
     
     # 获取缓存大小 (MB)
     temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")

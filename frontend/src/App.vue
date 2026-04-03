@@ -22,7 +22,7 @@ const fetchWithAuth = (url, options = {}) => {
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
-const activeTab = ref('check')   // 'check' | 'rules' | 'logs'
+const activeTab = ref('check')   // 'check' | 'rules' | 'logs' | 'settings'
 const isDragging = ref(false)
 const loading = ref(false)
 const progress = ref(0)
@@ -47,7 +47,6 @@ const fullRules = ref(null)
 const rulesSubTab = ref('general')
 
 // ── Settings ─────────────────────────────────────────────────────────────────
-const isSettingsOpen = ref(false)
 const systemSettings = ref(null)
 const isSettingsLoading = ref(false)
 const isCheckingUpdate = ref(false)
@@ -348,6 +347,7 @@ const switchTab = (tab) => {
   activeTab.value = tab
   if (tab === 'rules' && !rulesSummary.value) loadRulesSummary()
   if (tab === 'logs') loadLogs()
+  if (tab === 'settings') loadSystemSettings()
 }
 
 // ── Toast Notification ────────────────────────────────────────────────────────
@@ -411,8 +411,7 @@ const checkUpdate = async () => {
 }
 
 const openSettings = () => {
-  isSettingsOpen.value = true
-  loadSystemSettings()
+  switchTab('settings')
 }
 
 // ── Utility ────────────────────────────────────────────────────────────────────
@@ -459,7 +458,7 @@ const levelColor = (level) => {
 
       <div style="flex:1"></div>
 
-      <button class="nav-item" @click="openSettings" style="margin-top:auto">
+      <button class="nav-item" :class="{ active: activeTab === 'settings' }" @click="switchTab('settings')" style="margin-top:auto">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         系统设置
       </button>
@@ -788,87 +787,76 @@ const levelColor = (level) => {
           </div>
         </div>
       </div>
-    </main>
 
-    <!-- ── Settings Overlay ── -->
-    <div v-if="isSettingsOpen" class="settings-overlay" @click.self="isSettingsOpen = false">
-      <div class="settings-panel fade-in-right">
-        <div class="settings-header">
-          <h2>系统设置</h2>
-          <button class="close-btn" @click="isSettingsOpen = false">×</button>
+      <!-- ── SETTINGS TAB ────────────────────────────────────────────────── -->
+      <div v-if="activeTab === 'settings'" class="tab-panel">
+        <div class="panel-header">
+          <h1 class="panel-title">系统中心</h1>
+          <p class="panel-sub">管理校验模块开关、查看系统运行状态及软件更新</p>
         </div>
 
-        <div v-if="isSettingsLoading" class="settings-loader">
-          <div class="spinner"></div>
+        <div v-if="isSettingsLoading" class="loader-row">
+          <div class="spinner"></div><span class="pulse-text">加载系统配置...</span>
         </div>
 
-        <div v-else-if="systemSettings" class="settings-body">
-          <!-- Plugin Toggles -->
-          <section class="settings-section">
-            <h3 class="section-title">模块启用管理</h3>
-            <div class="plugin-toggles">
-              <div v-for="p in systemSettings.plugins" :key="p.id" class="plugin-row">
-                <div class="plugin-info">
-                  <span class="plugin-name">{{ p.name }}</span>
-                  <span class="plugin-id">{{ p.id }}</span>
+        <div v-else-if="systemSettings" class="fade-in">
+          <div class="settings-grid">
+            <!-- Plugin Management -->
+            <div class="settings-card plugin-mgmt">
+              <div class="card-header">
+                <h3>校验插件流水线 (Pipeline)</h3>
+                <span class="badge badge-primary">{{ systemSettings.plugins.filter(p=>p.enabled).length }}/{{ systemSettings.plugins.length }} 已启用</span>
+              </div>
+              <p class="card-desc">开启或关闭特定的校验规则模块，禁用后相关问题将不再被检测报告。</p>
+              
+              <div class="plugin-list-new">
+                <div v-for="p in systemSettings.plugins" :key="p.id" class="plugin-item-new" @click="togglePlugin(p)">
+                  <div class="plugin-info">
+                    <span class="name">{{ p.name }}</span>
+                    <span class="id">PLUGIN_ID: {{ p.id.toUpperCase() }}</span>
+                  </div>
+                  <label class="master-toggle" @click.stop>
+                    <input type="checkbox" :checked="p.enabled" @change="togglePlugin(p)" />
+                    <span class="toggle-track"></span>
+                  </label>
                 </div>
-                <label class="master-toggle">
-                  <input type="checkbox" :checked="p.enabled" @change="togglePlugin(p)" />
-                  <span class="toggle-track"></span>
-                </label>
               </div>
             </div>
-          </section>
 
-          <!-- System Info -->
-          <section class="settings-section">
-            <h3 class="section-title">系统信息</h3>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="label">软件版本</span>
-                <span class="val">{{ systemSettings.version }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">编译日期</span>
-                <span class="val">{{ systemSettings.build_date }}</span>
-              </div>
-              <div class="info-item">
-                <span class="label">规则文件</span>
-                <span class="val">{{ systemSettings.rules_file }}</span>
-              </div>
-            </div>
-            
-            <div class="update-check">
-              <button class="btn btn-ghost" :disabled="isCheckingUpdate" @click="checkUpdate">
-                {{ isCheckingUpdate ? '正在检查...' : '检查更新' }}
-              </button>
-              <div v-if="updateInfo" class="update-status">
-                <div v-if="updateInfo.has_update" class="has-update">
-                  <p>发现新版本 {{ updateInfo.latest }}</p>
-                  <span class="changelog">{{ updateInfo.changelog }}</span>
-                  <a :href="updateInfo.download_url" target="_blank" class="btn btn-primary" style="margin-top:0.8rem; display:inline-block; font-size:0.8rem; padding:6px 12px">
-                    🚀 去 GitHub 下载更新
-                  </a>
+            <!-- Version & Maintenance Side -->
+            <div class="settings-side-col">
+              <div class="settings-card info-card">
+                <h3>系统概览</h3>
+                <div class="info-list">
+                  <div class="info-row"><span class="lbl">软件版本</span><span class="val">{{ systemSettings.version }}</span></div>
+                  <div class="info-row"><span class="lbl">编译时间</span><span class="val">{{ systemSettings.build_date }}</span></div>
+                  <div class="info-row"><span class="lbl">规则模板</span><span class="val badge-ghost">{{ systemSettings.rules_file }}</span></div>
+                  <div class="info-row"><span class="lbl">缓存大小</span><span class="val" style="color:#fb7185">{{ systemSettings.cache_size_mb }} MB</span></div>
                 </div>
-                <p v-else class="no-update">当前已是最新版本</p>
+                <div class="card-footer" style="margin-top: 1.5rem;">
+                  <button class="btn btn-ghost" style="width:100%; border-color:#f43f5e22; color:#fb7185" @click="clearSystemCache">🗑 清理空间</button>
+                </div>
               </div>
-            </div>
-          </section>
 
-          <!-- Maintenance -->
-          <section class="settings-section">
-            <h3 class="section-title">系统维护</h3>
-            <div class="maintenance-box">
-              <div class="cache-info">
-                <span class="label">临时文件大小</span>
-                <span class="val">{{ systemSettings.cache_size_mb }} MB</span>
+              <div class="settings-card update-card">
+                <h3>在线更新</h3>
+                <button class="btn btn-primary" :disabled="isCheckingUpdate" @click="checkUpdate" style="width:100%">
+                  {{ isCheckingUpdate ? '正在连接 GitHub...' : '检查版本更新' }}
+                </button>
+                <div v-if="updateInfo" class="update-res fade-in">
+                  <div v-if="updateInfo.has_update" class="update-box">
+                    <div class="v-tag">New v{{ updateInfo.latest }}</div>
+                    <pre class="changes">{{ updateInfo.changelog }}</pre>
+                    <a :href="updateInfo.download_url" target="_blank" class="download-link">🔗 点击跳转发布页</a>
+                  </div>
+                  <div v-else class="v-up-to-date">🎉 当前已是最新版本</div>
+                </div>
               </div>
-              <button class="btn btn-ghost" style="color:#f87171" @click="clearSystemCache">🗑 一键清理缓存</button>
             </div>
-          </section>
+          </div>
         </div>
       </div>
-    </div>
+    </main>
   </div>
 </template>
 
@@ -1239,63 +1227,39 @@ const levelColor = (level) => {
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
 
 /* ── Settings Panel Styles ── */
-.settings-overlay {
-  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
-  z-index: 1000; display: flex; justify-content: flex-end;
-}
+/* ── Settings Tab Styles ── */
+.settings-grid { display: grid; grid-template-columns: 1fr 340px; gap: 2rem; align-items: start; }
+.settings-card { background: rgba(30,41,59,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 18px; padding: 1.8rem; }
+.settings-card h3 { margin: 0 0 1.2rem 0; font-size: 1.15rem; color: #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+.card-desc { font-size: 0.88rem; color: #64748b; margin-bottom: 1.8rem; line-height: 1.6; }
 
-.settings-panel {
-  width: 400px; height: 100%; background: #111827;
-  border-left: 1px solid rgba(255,255,255,0.08);
-  display: flex; flex-direction: column; overflow-y: auto;
-  box-shadow: -10px 0 30px rgba(0,0,0,0.5);
-}
-
-.settings-header {
-  padding: 1.5rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+.plugin-mgmt { min-height: 500px; }
+.plugin-list-new { display: flex; flex-direction: column; gap: 0.8rem; }
+.plugin-item-new {
+  background: rgba(15,23,42,0.4); border: 1px solid rgba(255,255,255,0.04);
+  padding: 1.2rem 1.5rem; border-radius: 14px;
   display: flex; justify-content: space-between; align-items: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
 }
-
-.settings-header h2 { margin: 0; font-size: 1.3rem; color: #f1f5f9; }
-.close-btn { background: none; border: none; font-size: 2rem; color: #64748b; cursor: pointer; line-height: 1; }
-
-.settings-body { padding: 2rem; display: flex; flex-direction: column; gap: 2.5rem; }
-
-.section-title {
-  font-size: 0.85rem; color: #4f46e5; text-transform: uppercase;
-  letter-spacing: 0.08em; font-weight: 700; margin-bottom: 1.2rem;
-  padding-bottom: 0.5rem; border-bottom: 1px solid rgba(79,70,229,0.2);
-}
-
-.plugin-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0.8rem 0; border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-
+.plugin-item-new:hover { background: rgba(30,58,138,0.15); border-color: rgba(59,130,246,0.3); transform: translateX(1px); }
 .plugin-info { display: flex; flex-direction: column; gap: 0.2rem; }
-.plugin-name { font-size: 0.95rem; color: #e2e8f0; font-weight: 500; }
-.plugin-id { font-size: 0.75rem; color: #475569; font-family: monospace; }
+.plugin-info .name { font-size: 1rem; color: #e2e8f0; font-weight: 600; }
+.plugin-info .id { font-size: 0.72rem; color: #475569; font-family: monospace; letter-spacing: 0.05em; }
 
-.info-grid { display: grid; gap: 1rem; margin-bottom: 1.5rem; }
-.info-item { display: flex; justify-content: space-between; font-size: 0.9rem; }
-.info-item .label { color: #64748b; }
-.info-item .val { color: #cbd5e1; font-weight: 500; }
+.settings-side-col { display: flex; flex-direction: column; gap: 2rem; }
+.info-list { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; }
+.info-row { display: flex; justify-content: space-between; font-size: 0.92rem; }
+.info-row .lbl { color: #64748b; }
+.info-row .val { color: #cbd5e1; font-weight: 500; font-family: monospace; }
+.badge-ghost { background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; }
 
-.update-check {
-  background: rgba(255,255,255,0.02); padding: 1.2rem; border-radius: 12px;
-  display: flex; flex-direction: column; gap: 1rem;
-}
-
-.update-status { font-size: 0.88rem; }
-.has-update { color: #fbbf24; line-height: 1.4; }
-.changelog { font-size: 0.75rem; color: #94a3b8; white-space: pre-wrap; display: block; margin-top: 0.4rem; }
-.no-update { color: #4ade80; }
-
-.maintenance-box { display: flex; justify-content: space-between; align-items: center; }
-.cache-info .val { font-size: 1rem; display: block; color: #e11d48; margin-top: 0.2rem; }
-
-.settings-loader { flex: 1; display: flex; justify-content: center; align-items: center; }
+.update-res { margin-top: 1.5rem; }
+.update-box { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); padding: 1.2rem; border-radius: 12px; }
+.v-tag { display: inline-block; background: #f59e0b; color: #000; font-weight: 800; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 0.8rem; }
+.changes { font-family: inherit; font-size: 0.82rem; color: #d97706; margin: 0 0 1rem 0; white-space: pre-wrap; line-height: 1.5; }
+.download-link { font-size: 0.85rem; color: #f59e0b; text-decoration: none; font-weight: 600; border-bottom: 1px dashed; }
+.v-up-to-date { text-align: center; color: #10b981; font-weight: 600; font-size: 0.9rem; }
 
 .fade-in-right { animation: fadeInRight 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
 @keyframes fadeInRight { from { opacity: 0; transform: translateX(50px); } to { opacity: 1; transform: none; } }

@@ -4,12 +4,13 @@
 
 ### 🔧 规则管理中心稳定性修复 (Rule Management Stability Fix)
 
-**规则管理页面崩溃修复 (UI Crash Fix)**
-- **渲染容错化**：修复了 `App.vue` 在加载规则摘要时由于后端字段缺失导致的 JS 运行时错误（`TypeError`），通过可选链与默认值实现了页面的稳健降级。
-- **摘要字段补全**：扩充了 `RuleLoader.get_summary` 返回的元数据，动态提取当前配置中的样式名称，对齐了前端展示需求。
+**后端接口补全 (API Integrity)**
+- **修复 RuleLoader 缺失方法**：补足了 `import_from_json` 方法，解决了可视化编辑器无法正常保存规则的 BUG。
+- **RuleConfig 属性鲁棒化**：通过显式实例默认值（Explicit Instance Defaults）修复了某些环境下缺省 `font` 属性导致的校验中断。
 
-**可观测性增强 (Observability)**
-- **规则管理审计日志**：在 `/api/rules` 相关端点引入了全链路异常捕获与显式日志记录，确保规则加载、切换等关键操作在系统日志中可查。
+**渲染与可观测性 (UI & Observability)**
+- **渲染容错化**：修复了前端加载摘要时的 `TypeError`。
+- **配置审计增强**：增强了配置接口的日志记录能力。
 
 ## v1.2.1 — 2026-04-03
 

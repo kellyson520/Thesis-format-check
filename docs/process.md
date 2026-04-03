@@ -4,10 +4,10 @@
 
 | 任务标识 | 任务描述 | 开始日期 | 结束日期 | 进度 | 传送门 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 20260403_AlgorithmPrecision | 算法精度提升：基于语义分析的段落对齐与公式识别优化 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_AlgorithmPrecision/) |
-| 20260403_PaginationFeatures | Word高级排版特性检测：孤行控制/与下段同页 + 修订模式清理 | 2026-04-03 | - | 10% | [📂 查看](./Workstream_FormatCheck/20260403_PaginationFeatures/) |
-| 20260403_FixCircularImport_P0 | 修复循环引用：利用 TYPE_CHECKING 与延迟导入重构 RuleConfig & Plugin 加载链路 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_System/20260403_FixCircularImport_P0/) |
-| 20260403_AddSettingsFeature_P1 | 增加系统设置界面：开启/关闭插件、检查更新与版本展示 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_System/20260403_AddSettingsFeature_P1/) |
+| 20260404_DeepValidationEngine_P1 | 校验引擎深度重构：公式/表格语义、视觉特征聚类与自动 UI | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260404_DeepValidationEngine_P1/) |
+| 20260403_AlgorithmPrecision | 算法精度提升：UNICODE 字符集探测与 UnitConverter 物理换算 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_AlgorithmPrecision/) |
+| 20260403_PaginationFeatures | Word 高级排版特性检测：孤行控制/与下段同页 + 修订模式清理 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_PaginationFeatures/) |
+| 20260403_SettingsUnifiedUI_P0 | 系统设置界面统一：侧边栏主 Tab 整合与全插件显式开关中心 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_Frontend/20260403_SettingsUnifiedUI_P0/) |
 
 
 ## 已完成任务

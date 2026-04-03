@@ -67,9 +67,14 @@ class CaptionsConfig(BaseModel):
 def build_rule_config_class() -> Type[BaseModel]:
     """
     组装顶层 RuleConfig。
+    遵循：所有插件主配置均在此显示声明，供自动化 UI 发现。
     """
     from use_cases.plugins.pagination_plugin import PaginationConfig
     from use_cases.plugins.page_margin_plugin import PageSetupConfig
+    from use_cases.plugins.font_plugin import FontConfig
+    from use_cases.plugins.spacing_plugin import SpacingConfig
+    from use_cases.plugins.hierarchy_plugin import HierarchyConfig, ReferencesConfig
+    from use_cases.plugins.caption_seq_plugin import CaptionSeqConfig
 
     # 基础字段
     base_fields = {
@@ -79,11 +84,16 @@ def build_rule_config_class() -> Type[BaseModel]:
         "captions": (CaptionsConfig, Field(default_factory=CaptionsConfig)),
         "validators": (ValidatorsConfig, Field(default_factory=ValidatorsConfig)),
         "style_mapping": (Dict[str, str], Field(default_factory=dict)),
+        
+        # 插件显式声明的顶层字段 (Master Toggles + Settings)
+        "font": (FontConfig, FontConfig()),
+        "spacing": (SpacingConfig, SpacingConfig()),
+        "pagination": (PaginationConfig, PaginationConfig()),
+        "page_setup": (PageSetupConfig, PageSetupConfig()),
+        "hierarchy": (HierarchyConfig, HierarchyConfig()),
+        "references": (ReferencesConfig, ReferencesConfig()),
+        "caption_seq": (CaptionSeqConfig, CaptionSeqConfig()),
     }
-    
-    # 插件显式声明的顶层字段
-    base_fields["pagination"] = (PaginationConfig, Field(default_factory=PaginationConfig))
-    base_fields["page_setup"] = (PageSetupConfig, Field(default_factory=PageSetupConfig))
 
     # 创建顶层类
     DynamicRuleConfig = create_model("RuleConfig", **base_fields)
@@ -154,6 +164,16 @@ class RuleLoader:
             raw = yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:
             raise ValueError(f"YAML 解析失败: {e}")
+        return self._update_from_raw(raw)
+
+    def import_from_json(self, json_content: str) -> dict:
+        try:
+            raw = json.loads(json_content)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"JSON 解析失败: {e}")
+        return self._update_from_raw(raw)
+
+    def _update_from_raw(self, raw: dict) -> dict:
         config = RuleConfig.model_validate(raw)
         with open(self.filepath, "w", encoding="utf-8") as f:
             yaml.dump(raw, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
@@ -192,14 +212,34 @@ class RuleLoader:
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> bool:
         """
         动态更新指定插件的启用状态并持久化。
+        支持同步更新 validators 声明区块。
         """
-        if not hasattr(self._config, plugin_id):
-            return False
+        # 1. 更新主配置对象 (如 RuleConfig.font.enabled)
+        main_updated = False
+        if hasattr(self._config, plugin_id):
+            plugin_cfg = getattr(self._config, plugin_id)
+            if hasattr(plugin_cfg, "enabled"):
+                plugin_cfg.enabled = enabled
+                main_updated = True
+        
+        # 2. 同步更新旧版 validators 区块 (如 RuleConfig.validators.check_font)
+        # 建立 ID 到 Validator Key 的映射
+        sync_map = {
+            "font": "check_font",
+            "spacing": "check_spacing",
+            "hierarchy": "check_hierarchy",
+            "references": "check_gb7714",
+            "caption_seq": "check_caption_seq" # 未来可能的扩展
+        }
+        
+        val_key = sync_map.get(plugin_id)
+        if val_key and hasattr(self._config.validators, val_key):
+            setattr(self._config.validators, val_key, enabled)
+            main_updated = True
             
-        plugin_cfg = getattr(self._config, plugin_id)
-        if hasattr(plugin_cfg, "enabled"):
-            plugin_cfg.enabled = enabled
+        if main_updated:
             # 持久化到文件
             self.import_from_yaml(self.export_as_yaml())
             return True
+            
         return False

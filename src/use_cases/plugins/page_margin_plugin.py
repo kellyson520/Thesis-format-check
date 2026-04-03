@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 class PageSetupConfig(BaseModel):
+    enabled: bool = True
     top_margin_cm: Optional[float] = None
     bottom_margin_cm: Optional[float] = None
     left_margin_cm: Optional[float] = None
@@ -32,6 +33,8 @@ class PageMarginPlugin(ISectionPlugin, DeclarativeConfigMixin):
 
     def check_sections(self, sections: List[SectionNode]) -> List[Issue]:
         issues: List[Issue] = []
+        if not self.config.page_setup.enabled:
+            return issues
         if not sections:
             return issues
         first = sections[0]

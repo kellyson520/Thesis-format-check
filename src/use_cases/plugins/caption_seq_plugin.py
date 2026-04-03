@@ -10,19 +10,28 @@ P0 重构（2026-04-03）：
 """
 from __future__ import annotations
 import re
-from typing import List
+from typing import List, TYPE_CHECKING
+from pydantic import BaseModel
 from domain.models import (
     Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext
 )
 from domain.interfaces import BaseRulePlugin
+from use_cases.plugins.mixin import DeclarativeConfigMixin
+
+if TYPE_CHECKING:
+    from use_cases.rule_config import RuleConfig
 
 # 题注正则：匹配 "图 1-2" / "图 2" / "表 3-1" 等格式
 # P0 升级：同时支持 "图1-2"（章节号-序号）和 "图1"（全局序号）两种模式
 _CAPTION_CHAPTER_RE = re.compile(r"(图|表)\s*(\d+)-(\d+)")   # 章节号-序号 格式
 _CAPTION_GLOBAL_RE  = re.compile(r"(图|表)\s*(\d+)")          # 全局/简单序号 格式
 
+class CaptionSeqConfig(BaseModel):
+    """题注校验配置。"""
+    enabled: bool = True
 
-class CaptionSeqPlugin(BaseRulePlugin):
+
+class CaptionSeqPlugin(BaseRulePlugin, DeclarativeConfigMixin):
     """
     检查图注和表注编号连续性（W004）。
 
@@ -34,9 +43,16 @@ class CaptionSeqPlugin(BaseRulePlugin):
 
     自动检测：若题注文本含 "X-Y" 格式则走章节模式，否则走全局模式。
     """
+    plugin_id = "caption_seq"
+    config_model = CaptionSeqConfig
+
+    def __init__(self, config: RuleConfig = None):
+        self.config = config
 
     def check(self, node: ParagraphNode, context: RuleContext) -> List[Issue]:
         issues: List[Issue] = []
+        if self.config and not self.config.caption_seq.enabled:
+            return issues
         sn = node.style_name
 
         # 只处理题注样式段落

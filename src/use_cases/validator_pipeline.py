@@ -144,7 +144,7 @@ class ValidatorPipeline:
             PaginationPlugin(self.config),
             HierarchyPlugin(self.config, self._style_mapper),
             ReferencesPlugin(self.config, self._style_mapper),
-            CaptionSeqPlugin(),
+            CaptionSeqPlugin(self.config),
         ]
 
     def _init_section_plugins(self) -> List[ISectionPlugin]:
