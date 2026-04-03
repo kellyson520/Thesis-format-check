@@ -4,21 +4,21 @@
 
 | 任务标识 | 任务描述 | 开始日期 | 结束日期 | 进度 | 传送门 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 20260403_FormatCheck_Evolution | Phase 4 进阶升级：一键修复、深度校验、可视化规则与性能优化 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_FormatCheck_Evolution/) |
-| 20260403_ValidationRefactor | 针对核心规则校验"写而不校"（间距/行距）的修复，以及字重容错与指针关联闭环重构 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_ValidationRefactor/) |
-| 20260403_DocxParserRefactor | 重构DocxParser：建立CSS-like层叠样式解析树（StyleResolver + InvisibleToken + 表格支持） | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_DocxParserRefactor/) |
-| 20260403_ValidatorStateMachine | 引入文档区域状态机：消除参考文献状态泄露与跨章节图表序号误报 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_ValidatorStateMachine/) |
-| 20260403_AlgorithmPrecision | 提升数据校验算法精度：unicodedata字符集检测 + UnitConverter动态单位换算 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_AlgorithmPrecision/) |
-| 20260403_PerformanceOptimization | 长文档性能优化：正则预编译 + Generator流式校验 + ProcessPoolExecutor | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_PerformanceOptimization/) |
-| 20260403_FixerPipeline | 打通Validator-Fixer闭环：Patch Object标准化 + Fixer类实现 + Zero-Disk IO导出 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_FixerPipeline/) |
-| 20260403_LocalAPISecurity | 本地API安全隔离：动态Token鉴权 + 严格CORS + 随机端口防护 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_LocalAPISecurity/) |
-| 20260403_PluginArchitecture | 插件化校验器架构：BaseValidator抽象 + ValidatorChain动态加载 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_PluginArchitecture/) |
+| 20260403_AlgorithmPrecision | 算法精度提升：基于语义分析的段落对齐与公式识别优化 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_AlgorithmPrecision/) |
 | 20260403_PaginationFeatures | Word高级排版特性检测：孤行控制/与下段同页 + 修订模式清理 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_PaginationFeatures/) |
-| 20260403_IPCProgress | IPC通信优化与实时进度条：SSE进度推送 + 前端平滑进度条UI | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_IPCProgress/) |
-| 20260403_TempFileGC | 垃圾回收与临时文件管理：Zero-Disk IO策略 + Lifespan清理钩子 | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260403_TempFileGC/) |
 
 ## 已完成任务
 
 | 任务标识 | 任务描述 | 开始日期 | 结束日期 | 进度 | 传送门 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| 20260403_AddReDetectButton_P1 | 增加重新检测功能按钮：支持已上传文件一键重校验 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_AddReDetectButton_P1/) |
 | 20260402_PersonalMVP | 针对个人使用精简开发的本地版论文格式校验系统MVP方案 | 2026-04-02 | 2026-04-02 | 100% | [📂 查看](./Workstream_FormatCheck/20260402_PersonalMVP/) |
+| 20260403_DocxParserRefactor | 重构DocxParser：接入StyleResolver样式树、表格支持与单位换算解开 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_DocxParserRefactor/) |
+| 20260403_ValidatorStateMachine | 引入文档区域状态机：实现参考文献进出边逻辑与章内题注计数 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_ValidatorStateMachine/) |
+| 20260403_FixerPipeline | 打通Validator-Fixer闭环：实现Patch对象标准化与多插件修复建议支持 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_FixerPipeline/) |
+| 20260403_IPCProgress | 实效进度条与SSE流：后端逐段 yield + 前端 ReadableStream 渲染 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_IPCProgress/) |
+| 20260403_LocalAPISecurity | 本地接口加固：动态 Token 鉴权中间件 + 随机可用端口 + URI 参数注入 UI | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_LocalAPISecurity/) |
+| 20260403_PluginArchitecture | 插件模式解耦：引入 _init_para_plugins 注册表 + Section 级支持 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_PluginArchitecture/) |
+| 20260403_TempFileGC | 垃圾回收与存储优化：全链路 Zero-Disk IO 内存流实现，已废弃所有 tempfile 及落盘逻辑 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_TempFileGC/) |
+| 20260403_CopyrightGenerator | 高级工具开发：软著源码前后 3000 行提取算法实现与一键提取 API | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_CopyrightGenerator/) |
+| 20260403_PerformanceOptimization | 长文档性能优化：正则预编译 + Generator流式校验（含节流机制） + 异常安全封装 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_PerformanceOptimization/) |

@@ -5,11 +5,13 @@ import json
 import threading
 import shutil
 import uvicorn
+import secrets
 import webview
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse, Response
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any
@@ -23,8 +25,11 @@ from infrastructure.logger import AppLogger
 # ── 新Clean Architecture 层（直接路径）────────────────────────────────────────
 from use_cases.rule_config import RuleLoader
 from use_cases.validator_pipeline import ValidatorPipeline
+from use_cases.fixer_pipeline import FixerPipeline
 from infrastructure.parsers.docx_parser import DocxParser
-from infrastructure.reporters.word_reporter import AnnotationReporter, DocumentFixer
+from infrastructure.reporters.docx_fixer import DocxFixer
+from infrastructure.reporters.word_reporter import AnnotationReporter
+from use_cases.copyright_generator import CopyrightGenerator
 
 # ─── 路径解析：兼容 PyInstaller 打包与直接开发运行 ───────────────────────────
 #
@@ -64,6 +69,7 @@ app_logger  = AppLogger(log_dir=log_dir)
 rule_loader = RuleLoader(rules_path)
 # ValidatorPipeline 基于 RuleConfig（Pydantic 强类型），不再依赖裸字典
 _pipeline   = ValidatorPipeline(rule_loader.get_rules())
+_fix_pipeline = FixerPipeline(DocxFixer)  # 注册 DocxFixer 工厂
 
 
 app = FastAPI(title="论文格式校验 API", version="2.0.0")
@@ -75,6 +81,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── 安全加固：动态 Token 鉴权中间件 ──────────────────────────────────────────
+_API_TOKEN = secrets.token_hex(16)
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # 静态文件和根路径放行，API 路径必须校验 Token
+        if request.url.path.startswith("/api"):
+            token = request.headers.get("X-Token")
+            if token != _API_TOKEN:
+                return JSONResponse(status_code=403, content={"detail": "Access Denied: Invalid Token"})
+        return await call_next(request)
+
+app.add_middleware(AuthMiddleware)
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -88,21 +108,54 @@ def _rebuild_pipeline() -> None:
 
 # ─── API: Document Checking ──────────────────────────────────────────────────
 
+@app.post("/api/check/stream")
+async def check_document_stream(file: UploadFile = File(...)):
+    """
+    在线实时校验（SSE）：上传 Docx，实时流式返回发现的 Issues。
+    P2 进度：允许前端显示实时进度条。
+    """
+    try:
+        app_logger.info(f"开始流式校验文件: {file.filename}")
+        raw = await file.read()
+        
+        # 直接使用内存流解析
+        parser = DocxParser(io.BytesIO(raw))
+        doc_model = parser.parse()
+
+        async def event_generator():
+            try:
+                # 将同步 Generator 转换为流式生成器
+                for event in _pipeline.run(doc_model):
+                    # 按照 SSE 规范格式化数据
+                    data = json.dumps(event.to_dict(), ensure_ascii=False)
+                    yield f"data: {data}\n\n"
+            except Exception as inner_e:
+                # 中途崩溃时，发送一个特殊的 error 事件
+                err_data = json.dumps({"type": "error", "message": f"校验中断: {inner_e}"})
+                yield f"data: {err_data}\n\n"
+        
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        app_logger.error(f"流式校验系统异常: {e}")
+        # 在 SSE 流中报错通常需要发送一个特定的 error 事件或在 data 中包含错误信息
+        return Response(content=f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n", media_type="text/event-stream")
+
+
 @app.post("/api/check")
 async def check_document(file: UploadFile = File(...)):
-    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, file.filename)
-
-    raw = await file.read()
-    with open(temp_path, "wb") as f:
-        f.write(raw)
-
+    """
+    在线校验：上传 Docx，返回 Issues JSON。
+    P1 升级：实现 Zero-Disk IO，不再落盘临时文件。
+    """
     try:
-        app_logger.info(f"开始校验文件: {file.filename}", extra={"filename": file.filename})
-
-        # 新架构：DocxParser → DocumentModel → ValidatorPipeline（Generator）
-        parser    = DocxParser(temp_path)
+        app_logger.info(f"开始校验文件: {file.filename}")
+        raw = await file.read()
+        
+        # 直接使用内存流解析
+        parser    = DocxParser(io.BytesIO(raw))
         doc_model = parser.parse()
 
         all_issues = []
@@ -115,12 +168,11 @@ async def check_document(file: UploadFile = File(...)):
                     "type":       issue.severity.value,
                     "context":    issue.context,
                     "message":    issue.message,
+                    # 将 Patch 转换为字典供前端显示修复建议（可选）
+                    "fixable":    issue.suggested_patch is not None
                 })
 
-        app_logger.info(
-            f"校验完成: {file.filename} → 发现 {len(all_issues)} 个问题",
-            extra={"filename": file.filename, "issue_count": len(all_issues)}
-        )
+        app_logger.info(f"校验完成: {file.filename} -> 发现 {len(all_issues)} 个问题")
         return JSONResponse(content={
             "issues": all_issues,
             "filename": file.filename,
@@ -128,19 +180,8 @@ async def check_document(file: UploadFile = File(...)):
             "checked_at": datetime.now().isoformat()
         })
     except Exception as e:
-        app_logger.error(f"校验失败: {file.filename} → {e}", extra={"filename": file.filename, "error": str(e)})
-        return JSONResponse(status_code=500, content={
-            "issues": [{"id": 0, "type": "Error", "context": "System", "message": f"解析异常: {e}"}],
-            "filename": file.filename,
-            "total": 1,
-            "checked_at": datetime.now().isoformat()
-        })
-    finally:
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
+        app_logger.error(f"校验失败: {file.filename} -> {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 # ─── API: Annotated Export ────────────────────────────────────────────────────
@@ -201,21 +242,22 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
 @app.post("/api/fix")
 async def fix_document(file: UploadFile = File(...)):
     """
-    一键自动修复格式，返回已修复规范的 Docx 文件。
+    一键自动修复：上传 Docx，后端执行全量校验并应用 Patch，返回修复后的 Docx。
     """
-    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, f"_fix_{file.filename}")
-
-    raw = await file.read()
-    with open(temp_path, "wb") as f:
-        f.write(raw)
-
     try:
         app_logger.info(f"开始自动修复文件: {file.filename}")
-        # 新 DocumentFixer 接受 RuleConfig（Pydantic 强类型）
-        fixer = DocumentFixer(temp_path, rule_loader.get_rules())
-        fixed_bytes = fixer.fix()
+        raw = await file.read()
+        
+        # 1. 执行校验获取 Issues（包含 Patch）
+        parser    = DocxParser(io.BytesIO(raw))
+        doc_model = parser.parse()
+        
+        all_issues = []
+        for event in _pipeline.run(doc_model):
+            all_issues.extend(event.issues)
+            
+        # 2. 执行修复
+        fixed_bytes = _fix_pipeline.apply_fixes(raw, all_issues)
 
         out_name = file.filename.replace(".docx", "_格式已修复.docx")
         app_logger.info(f"一键自动修复完成: {out_name}")
@@ -223,17 +265,11 @@ async def fix_document(file: UploadFile = File(...)):
         return Response(
             content=fixed_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{out_name}"'}
+            headers={"Content-Disposition": f'attachment; filename="{out_name.encode("utf-8").decode("latin-1")}"'}
         )
     except Exception as e:
         app_logger.error(f"自动化修复失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 # ─── API: Rules Management ────────────────────────────────────────────────────
@@ -242,6 +278,32 @@ async def fix_document(file: UploadFile = File(...)):
 async def get_rules_summary():
     """返回当前生效规则摘要，用于前端卡片展示。"""
     return JSONResponse(content=rule_loader.get_summary())
+
+
+@app.get("/api/rules/libraries")
+async def get_libraries():
+    """获取所有可用的规则库 (.yaml)。"""
+    lib_dir = os.path.join(app_root, "config") if getattr(sys, "frozen", False) else os.path.join(app_root, "src", "config")
+    if not os.path.exists(lib_dir):
+        return JSONResponse(content={"libraries": [], "current": ""})
+    files = [f for f in os.listdir(lib_dir) if f.endswith(".yaml") or f.endswith(".yml")]
+    return JSONResponse(content={"libraries": files, "current": os.path.basename(rules_path)})
+
+
+@app.post("/api/rules/switch")
+async def switch_library(filename: str):
+    """一键切换到选定的规则库文件并热重载。"""
+    global rules_path
+    lib_dir = os.path.join(app_root, "config") if getattr(sys, "frozen", False) else os.path.join(app_root, "src", "config")
+    new_path = os.path.join(lib_dir, filename)
+    if not os.path.exists(new_path):
+        raise HTTPException(status_code=404, detail="Rule file not found")
+    
+    rules_path = new_path
+    rule_loader.filepath = new_path
+    rule_loader.reload()
+    _rebuild_pipeline()
+    return JSONResponse(content={"status": "ok", "message": f"规则已切换至 {filename}"})
 
 
 @app.get("/api/rules/export/yaml")
@@ -333,6 +395,27 @@ async def clear_logs():
     return JSONResponse(content={"status": "ok", "message": "日志已清空"})
 
 
+# ─── API: Advanced Tools ─────────────────────────────────────────────────────
+
+@app.get("/api/tools/copyright/extract")
+async def extract_copyright_source():
+    """一键生成软著申报源码材料。"""
+    try:
+        # 获取项目根目录 (src 的上一级)
+        root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        generator = CopyrightGenerator(root_path)
+        source_content = generator.generate_src_merged()
+        
+        return Response(
+            content=source_content,
+            media_type="text/plain",
+            headers={"Content-Disposition": 'attachment; filename="software_copyright_source.txt"'}
+        )
+    except Exception as e:
+        app_logger.error(f"软著材料生成失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─── Static files (Production build) ─────────────────────────────────────────
 frontend_dist = os.path.join(app_root, "frontend", "dist")
 if os.path.exists(frontend_dist):
@@ -350,19 +433,29 @@ else:
 
 # ─── Server Bootstrap ─────────────────────────────────────────────────────────
 
-def start_server():
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+def start_server(port: int):
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":
-    t = threading.Thread(target=start_server, daemon=True)
+    import socket
+    # 动态获取空闲端口
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0))
+        listen_port = s.getsockname()[1]
+
+    t = threading.Thread(target=start_server, args=(listen_port,), daemon=True)
     t.start()
 
     dev_mode = "--dev" in sys.argv
-    url = "http://127.0.0.1:5173" if dev_mode else "http://127.0.0.1:8000"
+    # 开发模式仍固定 5173 以便于 Vite 调试热重载，生产模式使用随机端口
+    if dev_mode:
+        url = f"http://127.0.0.1:5173/?token={_API_TOKEN}&port={listen_port}"
+    else:
+        url = f"http://127.0.0.1:{listen_port}/?token={_API_TOKEN}"
 
     webview.create_window(
-        title="论文格式智能校验 · PC极客端",
+        title=f"论文格式智能校验 · v1.1.0 (Port: {listen_port})",
         url=url,
         width=1200,
         height=840,

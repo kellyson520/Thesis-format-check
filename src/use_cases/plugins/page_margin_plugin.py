@@ -1,10 +1,10 @@
-﻿"""
+"""
 Plugin: 页边距检查（Section 级别）
 职责：检查文档各节的页边距是否符合配置规范。
 """
 from __future__ import annotations
 from typing import List
-from domain.models import Issue, IssueCode, IssueSeverity, SectionNode
+from domain.models import Issue, IssueCode, IssueSeverity, SectionNode, Patch
 from domain.interfaces import ISectionPlugin
 from use_cases.rule_config import PageSetupConfig
 
@@ -42,5 +42,9 @@ class PageMarginPlugin(ISectionPlugin):
                         f"页面边界设定错误：{direction} margin 为 {actual:.2f}cm，"
                         f"规范要求 {expected}cm"
                     ),
+                    suggested_patch=Patch(
+                        target_type="section", para_index=1,
+                        attribute=f"{direction}_margin_cm", value=expected
+                    )
                 ))
         return issues

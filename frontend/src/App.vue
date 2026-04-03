@@ -1,12 +1,30 @@
-<script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
-const API = 'http://127.0.0.1:8000'
+// ── API Configuration (P5: Dynamic Handshake) ───────────────────────────────
+const token = ref('')
+const apiPort = ref('8000')
+const API = computed(() => `http://127.0.0.1:${apiPort.value}`)
+
+onMounted(() => {
+  const params = new URLSearchParams(window.location.search)
+  token.value = params.get('token') || ''
+  apiPort.value = params.get('port') || window.location.port || '8000'
+  loadRulesSummary()
+})
+
+const fetchWithAuth = (url, options = {}) => {
+  const headers = {
+    ...options.headers,
+    'X-Token': token.value
+  }
+  return fetch(url, { ...options, headers })
+}
 
 // ── State ────────────────────────────────────────────────────────────────────
 const activeTab = ref('check')   // 'check' | 'rules' | 'logs'
 const isDragging = ref(false)
 const loading = ref(false)
+const progress = ref(0)
 const validationDone = ref(false)
 const fileName = ref('')
 const uploadedFile = ref(null)
@@ -15,6 +33,8 @@ const checkedAt = ref('')
 
 const rulesLoading = ref(false)
 const rulesSummary = ref(null)
+const libraries = ref([])
+const currentLibrary = ref('')
 const logsLoading = ref(false)
 const logs = ref([])
 const logLevelFilter = ref('')
@@ -50,6 +70,7 @@ const uploadFile = async (file) => {
   uploadedFile.value = file
   fileName.value = file.name
   loading.value = true
+  progress.value = 0
   issues.value = []
   validationDone.value = false
 
@@ -57,17 +78,62 @@ const uploadFile = async (file) => {
   fd.append('file', file)
 
   try {
-    const res = await fetch(`${API}/api/check`, { method: 'POST', body: fd })
-    const data = await res.json()
-    issues.value = data.issues || []
-    checkedAt.value = data.checked_at
-    validationDone.value = true
+    // P5: 使用流式接口处理超长文档
+    const response = await fetchWithAuth(`${API.value}/api/check/stream`, { 
+      method: 'POST', 
+      body: fd 
+    })
+
+    if (!response.ok) throw new Error(await response.text())
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop() // 保留未完整的行
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const rawJson = line.replace('data: ', '')
+        try {
+          const event = JSON.parse(rawJson)
+          
+          if (event.event_type === 'progress') {
+            progress.value = event.progress
+            if (event.issues && event.issues.length) {
+              issues.value.push(...event.issues)
+            }
+          } else if (event.event_type === 'section_issues') {
+            issues.value.push(...event.issues)
+          } else if (event.event_type === 'done') {
+            validationDone.value = true
+            checkedAt.value = new Date().toLocaleString()
+          } else if (event.type === 'error') {
+            alert('校验中断: ' + event.message)
+          }
+        } catch (e) {
+          console.error('JSON解析失败:', rawJson, e)
+        }
+      }
+    }
   } catch (err) {
-    alert('校验服务不可达，请检查后端是否运行')
+    alert('校验失败: ' + err.message)
     console.error(err)
   } finally {
     loading.value = false
+    progress.value = 100
   }
+}
+
+const reCheck = async () => {
+  if (!uploadedFile.value || loading.value) return
+  await uploadFile(uploadedFile.value)
 }
 
 // ── Copy Report ────────────────────────────────────────────────────────────────
@@ -92,7 +158,7 @@ const exportAnnotated = async () => {
     const fd = new FormData()
     fd.append('file', uploadedFile.value)
     fd.append('issues_json', JSON.stringify(issues.value))
-    const res = await fetch(`${API}/api/export/annotated`, { method: 'POST', body: fd })
+    const res = await fetchWithAuth(`${API.value}/api/export/annotated`, { method: 'POST', body: fd })
     if (!res.ok) throw new Error(await res.text())
 
     const blob = await res.blob()
@@ -119,7 +185,7 @@ const fixDocument = async () => {
     fd.append('file', uploadedFile.value)
     
     // Auto-fix does not need issues array because backend fixer parses and fixes everything based on rules
-    const res = await fetch(`${API}/api/fix`, { method: 'POST', body: fd })
+    const res = await fetchWithAuth(`${API.value}/api/fix`, { method: 'POST', body: fd })
     if (!res.ok) throw new Error(await res.text())
 
     const blob = await res.blob()
@@ -142,7 +208,7 @@ const toggleEditRules = async () => {
   if (!isEditingRules.value) {
     rulesLoading.value = true
     try {
-      const res = await fetch(`${API}/api/rules/full_json`)
+      const res = await fetchWithAuth(`${API.value}/api/rules/full_json`)
       fullRules.value = await res.json()
       // Ensure nested keys exist for reactive binding
       if (!fullRules.value.validators) fullRules.value.validators = { check_hierarchy: true, check_gb7714: true }
@@ -160,7 +226,7 @@ const toggleEditRules = async () => {
 
 const saveRules = async () => {
   try {
-    const res = await fetch(`${API}/api/rules/save_json`, {
+    const res = await fetchWithAuth(`${API.value}/api/rules/save_json`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(fullRules.value)
@@ -177,15 +243,37 @@ const saveRules = async () => {
 const loadRulesSummary = async () => {
   rulesLoading.value = true
   try {
-    const res = await fetch(`${API}/api/rules/summary`)
+    const res = await fetchWithAuth(`${API.value}/api/rules/summary`)
     rulesSummary.value = await res.json()
+    await loadLibraries()
   } finally {
     rulesLoading.value = false
   }
 }
 
+const loadLibraries = async () => {
+  try {
+    const res = await fetchWithAuth(`${API.value}/api/rules/libraries`)
+    const data = await res.json()
+    libraries.value = data.libraries || []
+    currentLibrary.value = data.current || ''
+  } catch(e) { console.error("加载规则库失败", e) }
+}
+
+const switchLibrary = async () => {
+  if (!currentLibrary.value) return
+  rulesLoading.value = true
+  try {
+    const res = await fetchWithAuth(`${API.value}/api/rules/switch?filename=${currentLibrary.value}`, { method: 'POST' })
+    const data = await res.json()
+    showToast(data.message)
+    await loadRulesSummary()
+  } catch(e) { alert("切换失败: " + e.message) }
+  finally { rulesLoading.value = false }
+}
+
 const downloadRules = async (fmt) => {
-  const res = await fetch(`${API}/api/rules/export/${fmt}`)
+  const res = await fetchWithAuth(`${API.value}/api/rules/export/${fmt}`)
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -202,7 +290,7 @@ const importRules = async (e) => {
   const fd = new FormData()
   fd.append('file', file)
   try {
-    const res = await fetch(`${API}/api/rules/import`, { method: 'POST', body: fd })
+    const res = await fetchWithAuth(`${API.value}/api/rules/import`, { method: 'POST', body: fd })
     const data = await res.json()
     if (!res.ok) throw new Error(data.detail || '导入失败')
     showToast(data.message || '规则导入成功')
@@ -213,7 +301,7 @@ const importRules = async (e) => {
 }
 
 const reloadRules = async () => {
-  const res = await fetch(`${API}/api/rules/reload`, { method: 'POST' })
+  const res = await fetchWithAuth(`${API.value}/api/rules/reload`, { method: 'POST' })
   const data = await res.json()
   showToast(data.message)
   await loadRulesSummary()
@@ -224,9 +312,9 @@ const loadLogs = async () => {
   logsLoading.value = true
   try {
     const url = logLevelFilter.value
-      ? `${API}/api/logs?limit=200&level=${logLevelFilter.value}`
-      : `${API}/api/logs?limit=200`
-    const res = await fetch(url)
+      ? `${API.value}/api/logs?limit=200&level=${logLevelFilter.value}`
+      : `${API.value}/api/logs?limit=200`
+    const res = await fetchWithAuth(url)
     const data = await res.json()
     logs.value = (data.logs || []).reverse()
   } finally {
@@ -236,7 +324,7 @@ const loadLogs = async () => {
 
 const clearLogs = async () => {
   if (!confirm('确认清空所有日志记录？')) return
-  await fetch(`${API}/api/logs`, { method: 'DELETE' })
+  await fetchWithAuth(`${API.value}/api/logs`, { method: 'DELETE' })
   logs.value = []
   showToast('日志已清空')
 }
@@ -323,7 +411,14 @@ const levelColor = (level) => {
         <!-- Loading State -->
         <div v-if="loading" class="loader-row">
           <div class="spinner"></div>
-          <span class="pulse-text">深度解析引擎运行中，逐段式结构比对中...</span>
+          <div class="progress-box">
+            <div class="progress-info">
+              <span class="pulse-text">校验引擎运行中... ({{ progress }}%)</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" :style="{ width: progress + '%' }"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Results Panel -->
@@ -350,6 +445,9 @@ const levelColor = (level) => {
 
           <!-- Action Row -->
           <div class="action-row">
+            <button class="btn btn-ghost" @click="reCheck" :disabled="loading">
+              🔄 重新检测
+            </button>
             <button class="btn btn-ghost" @click="copyReport">
               📋 复制报告文本
             </button>
@@ -506,21 +604,30 @@ const levelColor = (level) => {
            </div>
         </div>
 
-        <div class="action-row" style="margin-top:2rem; flex-wrap:wrap; gap:0.8rem">
-          <template v-if="!isEditingRules">
-            <button class="btn btn-primary" style="background: linear-gradient(135deg, #f59e0b, #d97706);" @click="toggleEditRules">✏️ 可视化编辑规则</button>
-            <button class="btn btn-ghost" @click="downloadRules('yaml')">⬇ 导出 YAML</button>
-            <button class="btn btn-ghost" @click="downloadRules('json')">⬇ 导出 JSON</button>
+        <div class="action-row" style="margin-top:2rem; flex-wrap:wrap; gap:1.2rem; align-items:center; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.5rem;">
+          <div class="library-selector" style="display:flex; flex-direction:column; gap:0.5rem">
+            <label style="font-size:0.8rem; color:#64748b; font-weight:600">校级规则库模板</label>
+            <div style="display:flex; gap:0.5rem">
+              <select class="select" v-model="currentLibrary" style="min-width:180px">
+                <option v-for="lib in libraries" :key="lib" :value="lib">{{ lib }}</option>
+              </select>
+              <button class="btn btn-ghost" @click="switchLibrary">一键应用</button>
+            </div>
+          </div>
+
+          <div v-if="!isEditingRules" style="display:flex; gap:0.8rem; height:fit-content; margin-top:1.2rem">
+            <button class="btn btn-primary" style="background: linear-gradient(135deg, #f59e0b, #d97706);" @click="toggleEditRules">✏️ 可视化编辑</button>
+            <button class="btn btn-ghost" @click="downloadRules('yaml')">⬇ 导出</button>
             <label class="btn btn-ghost" style="cursor:pointer">
-              ⬆ 导入规则文件
+              ⬆ 导入
               <input type="file" accept=".yaml,.yml,.json" @change="importRules" hidden />
             </label>
-            <button class="btn btn-primary" @click="reloadRules">🔄 热重载规则</button>
-          </template>
-          <template v-else>
-            <button class="btn btn-primary" @click="saveRules">💾 保存并应用更改</button>
+            <button class="btn btn-primary" @click="reloadRules">🔄 热重载</button>
+          </div>
+          <div v-else style="display:flex; gap:0.8rem; height:fit-content; margin-top:1.2rem">
+            <button class="btn btn-primary" @click="saveRules">💾 保存并应用</button>
             <button class="btn btn-ghost" @click="toggleEditRules">❌ 取消</button>
-          </template>
+          </div>
         </div>
       </div>
 
@@ -832,6 +939,12 @@ const levelColor = (level) => {
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(12px); }
 
 /* ── Animations ────────────────────────────────────────────────────────────── */
+/* ── Progress Box (P5) ───────────────────────────────────────────────────── */
+.progress-box { flex: 1; display: flex; flex-direction: column; gap: 0.6rem; }
+.progress-info { display: flex; justify-content: space-between; align-items: center; }
+.progress-bar-bg { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, #60a5fa, #a78bfa); transition: width 0.3s ease; }
+
 .fade-in { animation: fadeIn 0.4s ease forwards; }
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
 </style>

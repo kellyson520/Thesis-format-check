@@ -26,6 +26,6 @@
 - [x] 交互打磨: 去除必须改文件的体验掣肘。
 
 ### Phase 4: 性能与工程化兜底 (Performance & QA)
-- [ ] websocket 加入: 在长时间的重解析或修复时（例如动辄百页），实现前后端实时进度条上报通信。
-- [ ] 单元及集成测试: 在 `tests/` 目录下提供自动化 TestCase（特别是边缘用例）。
-- [ ] 包管理及交叉编译: 对 macOS 和 Linux 添加 PyInstaller 处理，扩展云端的 release Actions 范畴。
+- [x] SSE 流式上报: 实现前后端实时进度条通信（替代 WebSocket 以获得更好的稳定性与 Zero-Disk 适配性）。
+- [x] 单元及集成测试: 在 `tests/` 目录下提供自动化 TestCase（覆盖 Fixer 与 SSE 链路）。
+- [x] 包管理及交叉编译: 对 macOS 和 Linux 添加 PyInstaller 处理，扩展云端的 release Actions 范畴（已于 CI 代码中预置）。

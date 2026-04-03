@@ -9,20 +9,17 @@
 ## 待办清单 (Checklist)
 
 ### Phase 1: 中英文字符集检测优化
-- [ ] 实现 `is_cjk_character(char: str) -> bool` 使用 `unicodedata` 判断 CJK Block
-- [ ] 实现 `detect_text_charset(text: str) -> TextCharset` 清洗数字和空白后判断
-- [ ] 替换 Validator 中所有 `has_chinese` / `has_ascii` 调用点
-- [ ] 编写单元测试 `tests/unit/utils/test_charset_detector.py`
+- [x] 实现 `is_cjk_character(char: str) -> bool` 使用 `unicodedata` 判断 CJK Block
+- [x] 实现 `detect_text_charset(text: str) -> TextCharset` 清洗数字和空白后判断
+- [x] 替换 Validator 中所有 `has_chinese` / `has_ascii` 调用点 (FontPlugin 重构完成)
+- [x] 编写单元测试 `tests/unit/utils/test_charset_detector.py`
 
 ### Phase 2: UnitConverter 工具类
-- [ ] 实现 `UnitConverter` 类
-  - `pt_to_chars(pt_value, font_size_pt) -> float`
-  - `cm_to_pt(cm_value) -> float`
-  - `pt_to_cm(pt_value) -> float`
-- [ ] 内置字号常量字典（小初=42pt, 初号=36pt, 小一=30pt ... 小五=9pt）
-- [ ] 替换 Validator 中所有 `/ 12` `/ 28.35` 类型的魔法数字
-- [ ] 编写单元测试 `tests/unit/utils/test_unit_converter.py`
+- [x] 实现 `UnitConverter` 类并合并 infrastructure 冗余逻辑
+- [x] 内置字号常量字典（小初=36pt, 初号=42pt ... 小五=9pt）
+- [x] 替换 Validator 中所有 `/ 12` `/ 28.35` 类型的魔法数字 (DocxParser 集成完成)
+- [x] 编写单元测试 `tests/unit/utils/test_unit_converter.py`
 
 ### Phase 3: 集成与验证
-- [ ] 与 StyleResolver 集成：`UnitConverter` 使用 computed font_size 动态换算
-- [ ] 运行回归测试，确认缩进误报率降低
+- [x] 与 StyleResolver 集成：`UnitConverter` 使用 computed font_size 动态换算
+- [/] 运行回归测试，确认缩进误报率降低

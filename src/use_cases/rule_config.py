@@ -76,24 +76,44 @@ class RuleConfig(BaseModel):
     captions: CaptionsConfig = Field(default_factory=CaptionsConfig)
     page_setup: PageSetupConfig = Field(default_factory=PageSetupConfig)
     validators: ValidatorsConfig = Field(default_factory=ValidatorsConfig)
+    # P0 新增：自定义样式映射 {"我的标题1": "level_1", "我的图注": "figure_caption"}
+    style_mapping: Dict[str, str] = Field(default_factory=dict)
 
     def get_paragraph_rule(self, style_name: str) -> Optional[ParagraphRule]:
         """
         根据 Word 样式名称查找对应的格式规则。
-        替代原来的 rules.get('headings', {}).get('level_1') 脆弱链式调用。
+        使用 StyleMapper (逻辑上) 或配置的 style_mapping 进行解耦。
         """
-        sn = style_name
-        if sn.startswith("Heading 1") or sn.startswith("标题 1"):
-            return self.headings.level_1
-        if sn.startswith("Heading 2") or sn.startswith("标题 2"):
-            return self.headings.level_2
-        if sn.startswith("Heading 3") or sn.startswith("标题 3"):
-            return self.headings.level_3
-        if "Caption" in sn or "题注" in sn:
-            if "Figure" in sn or "图" in sn:
+        # 1. 检查自定义映射
+        mapped_key = self.style_mapping.get(style_name)
+        if mapped_key:
+            return self._get_rule_by_key(mapped_key)
+
+        # 2. 回退到内置启发式逻辑 (解耦后使用 StyleMapper 相似逻辑)
+        from use_cases.style_mapper import StyleMapper
+        mapper = StyleMapper() # 使用默认内置规则
+        
+        level = mapper.get_heading_level(style_name)
+        if level == 1: return self.headings.level_1
+        if level == 2: return self.headings.level_2
+        if level == 3: return self.headings.level_3
+        
+        if "Caption" in style_name or "题注" in style_name:
+            if "Figure" in style_name or "图" in style_name:
                 return self.captions.figure_caption
             return self.captions.table_caption
+            
         return self.paragraphs.body_text
+
+    def _get_rule_by_key(self, key: str) -> Optional[ParagraphRule]:
+        """通过 key (如 'level_1', 'body_text') 获取对应规则对象。"""
+        if key == "level_1": return self.headings.level_1
+        if key == "level_2": return self.headings.level_2
+        if key == "level_3": return self.headings.level_3
+        if key == "body_text": return self.paragraphs.body_text
+        if key == "figure_caption": return self.captions.figure_caption
+        if key == "table_caption": return self.captions.table_caption
+        return None
 
 
 # ─── 规则加载器 ───────────────────────────────────────────────────────────────
@@ -118,7 +138,7 @@ class RuleLoader:
         return RuleConfig.model_validate(raw)
 
     def reload(self) -> None:
-        """热重载规则文件，不重启服务。"""
+        """从当前 filepath 重新加载规则文件。"""
         self._config = self._load()
 
     def get_rules(self) -> RuleConfig:

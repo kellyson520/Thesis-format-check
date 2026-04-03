@@ -1,11 +1,11 @@
-﻿"""
+"""
 Plugin: 间距与缩进检查（E005/E006/E007/W002/W003）
 职责：检查段前间距、段后间距、行距、对齐方式、首行缩进。
 """
 from __future__ import annotations
 from typing import List
 from domain.models import (
-    Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext
+    Issue, IssueCode, IssueSeverity, ParagraphNode, RuleContext, Patch
 )
 from domain.interfaces import BaseRulePlugin
 from use_cases.rule_config import RuleConfig
@@ -45,6 +45,10 @@ class SpacingPlugin(BaseRulePlugin):
                         f"段前间距错误：[{rule_name}] 当前 {node.space_before_pt}pt，"
                         f"规范要求 {rule.space_before}pt"
                     ),
+                    suggested_patch=Patch(
+                        target_type="paragraph", para_index=node.index,
+                        attribute="space_before_pt", value=rule.space_before
+                    )
                 ))
 
         # 段后间距
@@ -59,6 +63,10 @@ class SpacingPlugin(BaseRulePlugin):
                         f"段后间距错误：[{rule_name}] 当前 {node.space_after_pt}pt，"
                         f"规范要求 {rule.space_after}pt"
                     ),
+                    suggested_patch=Patch(
+                        target_type="paragraph", para_index=node.index,
+                        attribute="space_after_pt", value=rule.space_after
+                    )
                 ))
 
         # 行距
@@ -73,6 +81,10 @@ class SpacingPlugin(BaseRulePlugin):
                         f"行距错误：[{rule_name}] 检测到 {node.line_spacing}，"
                         f"规范要求 {rule.line_spacing}"
                     ),
+                    suggested_patch=Patch(
+                        target_type="paragraph", para_index=node.index,
+                        attribute="line_spacing", value=rule.line_spacing
+                    )
                 ))
 
         # 对齐方式
@@ -87,6 +99,10 @@ class SpacingPlugin(BaseRulePlugin):
                         f"段落对齐偏差：排版方向检测为 '{node.alignment}'，"
                         f"应更正为 '{rule.alignment}'"
                     ),
+                    suggested_patch=Patch(
+                        target_type="paragraph", para_index=node.index,
+                        attribute="alignment", value=rule.alignment
+                    )
                 ))
 
         # 首行缩进
@@ -101,6 +117,10 @@ class SpacingPlugin(BaseRulePlugin):
                         f"首行缩进约束：段首缩进当前约 {node.first_line_indent_chars:.1f} 字符，"
                         f"未能达到 {rule.first_line_indent} 字符缩进阈值"
                     ),
+                    suggested_patch=Patch(
+                        target_type="paragraph", para_index=node.index,
+                        attribute="first_line_indent_chars", value=rule.first_line_indent
+                    )
                 ))
 
         return issues

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Domain Interfaces — 抽象接口定义
 规则：此模块只依赖 domain.models，禁止导入任何外部库。
 所有具体实现必须在 infrastructure/ 或 use_cases/ 层完成。
@@ -64,5 +64,21 @@ class ISectionPlugin(ABC):
     def check_sections(self, sections: List[SectionNode]) -> List[Issue]:
         """
         对文档节信息执行检查（如页边距）。
+        """
+        ...
+
+
+class IFixer(ABC):
+    """
+    文档修复器接口。
+    实现类（如 DocxFixer）负责将 Patch 应用到物理文件。
+    """
+
+    @abstractmethod
+    def fix(self, patches: List[Patch]) -> bytes:
+        """
+        应用补丁列表并返回修复后的文件二进制流（Zero-Disk IO）。
+        :param patches: 待应用的修复指令列表
+        :return: 修复后的文件内容（bytes）
         """
         ...
