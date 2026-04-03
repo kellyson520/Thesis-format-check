@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Dict, Any
 from docx import Document
 from docx.shared import RGBColor, Pt
 import tempfile
@@ -20,6 +21,7 @@ from engine.rule_loader import RuleLoader
 from engine.validator import Validator
 from engine.docx_parser import DocxParser
 from engine.logger import AppLogger
+from engine.fixer import DocumentFixer
 
 # ─── 路径解析：兼容 PyInstaller 打包与直接开发运行 ───────────────────────────
 #
@@ -119,8 +121,8 @@ async def check_document(file: UploadFile = File(...)):
     try:
         app_logger.info(f"开始校验文件: {file.filename}", extra={"filename": file.filename})
         parser = DocxParser(temp_path)
-        elements = parser.parse()
-        issues = validator.validate(elements)
+        parsed_data = parser.parse()
+        issues = validator.validate(parsed_data)
 
         app_logger.info(
             f"校验完成: {file.filename} → 发现 {len(issues)} 个问题",
@@ -189,6 +191,43 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
                 pass
 
 
+@app.post("/api/fix")
+async def fix_document(file: UploadFile = File(...)):
+    """
+    一键自动修复格式，返回已修复规范的 Docx 文件。
+    """
+    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, f"_fix_{file.filename}")
+
+    raw = await file.read()
+    with open(temp_path, "wb") as f:
+        f.write(raw)
+
+    try:
+        app_logger.info(f"开始自动修复文件: {file.filename}")
+        fixer = DocumentFixer(temp_path, rule_loader.get_rules())
+        fixed_bytes = fixer.fix()
+        
+        out_name = file.filename.replace(".docx", "_格式已修复.docx")
+        app_logger.info(f"一键自动修复完成: {out_name}")
+        
+        return Response(
+            content=fixed_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{out_name}"'}
+        )
+    except Exception as e:
+        app_logger.error(f"自动化修复失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+
 # ─── API: Rules Management ────────────────────────────────────────────────────
 
 @app.get("/api/rules/summary")
@@ -217,6 +256,24 @@ async def export_rules_json():
         media_type="application/json",
         headers={"Content-Disposition": 'attachment; filename="rules_export.json"'}
     )
+
+@app.get("/api/rules/full_json")
+async def get_full_rules_json():
+    """返回完整规则JSON对象（用于可视化编辑器绑定）。"""
+    return JSONResponse(content=rule_loader.get_rules())
+
+@app.post("/api/rules/save_json")
+async def save_rules_json(rules: Dict[Any, Any]):
+    """接收完整JSON对象覆写当前规则并重载。"""
+    try:
+        json_str = json.dumps(rules, ensure_ascii=False)
+        result = rule_loader.import_from_json(json_str)
+        _rebuild_validator()
+        app_logger.info("规则文件通过可视化编辑器成功覆盖")
+        return JSONResponse(content=result)
+    except Exception as e:
+        app_logger.error(f"规则保存失败: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @app.post("/api/rules/import")

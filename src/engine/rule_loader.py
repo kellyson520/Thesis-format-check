@@ -14,7 +14,7 @@ class RuleLoader:
     - 支持规则校验 (validate_schema) 防止非法规则损坏引擎
     """
 
-    REQUIRED_TOP_KEYS = {"document", "headings", "paragraphs", "captions"}
+    REQUIRED_TOP_KEYS = {"document", "headings", "paragraphs", "captions", "page_setup", "validators"}
 
     def __init__(self, filepath: str):
         self.filepath = filepath

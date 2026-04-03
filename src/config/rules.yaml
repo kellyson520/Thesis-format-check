@@ -59,3 +59,11 @@ captions:
     alignment: center
     space_before: 6
     space_after: 6
+page_setup:
+  top_margin_cm: 2.54
+  bottom_margin_cm: 2.54
+  left_margin_cm: 3.18
+  right_margin_cm: 3.18
+validators:
+  check_hierarchy: true
+  check_gb7714: true

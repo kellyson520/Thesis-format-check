@@ -88,4 +88,14 @@ class DocxParser:
                 "space_after_pt": space_after.pt if space_after else 0,
                 "runs": runs_data
             })
-        return elements
+        
+        sections_data = []
+        for s in self.doc.sections:
+            sections_data.append({
+                "top_margin_cm": s.top_margin.cm if s.top_margin else None,
+                "bottom_margin_cm": s.bottom_margin.cm if s.bottom_margin else None,
+                "left_margin_cm": s.left_margin.cm if s.left_margin else None,
+                "right_margin_cm": s.right_margin.cm if s.right_margin else None,
+            })
+
+        return {"elements": elements, "sections": sections_data}

@@ -20,6 +20,9 @@ const logs = ref([])
 const logLevelFilter = ref('')
 
 const exporting = ref(false)
+const fixing = ref(false)
+const isEditingRules = ref(false)
+const fullRules = ref(null)
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const errorCount = computed(() => issues.value.filter(i => i.type === 'Error').length)
@@ -107,7 +110,70 @@ const exportAnnotated = async () => {
   }
 }
 
+// ── Auto-Fix Docx ─────────────────────────────────────────────────────────────
+const fixDocument = async () => {
+  if (!uploadedFile.value || !issues.value.length) return
+  fixing.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', uploadedFile.value)
+    
+    // Auto-fix does not need issues array because backend fixer parses and fixes everything based on rules
+    const res = await fetch(`${API}/api/fix`, { method: 'POST', body: fd })
+    if (!res.ok) throw new Error(await res.text())
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName.value.replace('.docx', '_格式已修复.docx')
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast('论文格式已一键修复完成并下载！')
+  } catch (err) {
+    alert(`修复失败：${err.message}`)
+  } finally {
+    fixing.value = false
+  }
+}
+
 // ── Rules Tab ─────────────────────────────────────────────────────────────────
+const toggleEditRules = async () => {
+  if (!isEditingRules.value) {
+    rulesLoading.value = true
+    try {
+      const res = await fetch(`${API}/api/rules/full_json`)
+      fullRules.value = await res.json()
+      // Ensure nested keys exist for reactive binding
+      if (!fullRules.value.validators) fullRules.value.validators = { check_hierarchy: true, check_gb7714: true }
+      if (!fullRules.value.page_setup) fullRules.value.page_setup = { top_margin_cm: 2.54, bottom_margin_cm: 2.54, left_margin_cm: 3.18, right_margin_cm: 3.18 }
+      isEditingRules.value = true
+    } catch (err) {
+      alert("加载完整规则失败：" + err.message)
+    } finally {
+      rulesLoading.value = false
+    }
+  } else {
+    isEditingRules.value = false
+  }
+}
+
+const saveRules = async () => {
+  try {
+    const res = await fetch(`${API}/api/rules/save_json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fullRules.value)
+    })
+    if (!res.ok) throw new Error(await res.text())
+    showToast("规则已保存至后端并热重载！")
+    isEditingRules.value = false
+    await loadRulesSummary()
+  } catch(err) {
+    alert("保存失败：" + err.message)
+  }
+}
+
 const loadRulesSummary = async () => {
   rulesLoading.value = true
   try {
@@ -291,6 +357,10 @@ const levelColor = (level) => {
               <span v-if="exporting">导出中...</span>
               <span v-else>📥 导出批注 Docx</span>
             </button>
+            <button class="btn btn-primary" style="background: linear-gradient(135deg, #10b981, #047857);" :disabled="fixing || !issues.length" @click="fixDocument">
+              <span v-if="fixing">修复中...</span>
+              <span v-else>✨ 一键排版修复 (Auto-Fix)</span>
+            </button>
           </div>
 
           <!-- Issue Cards -->
@@ -323,7 +393,7 @@ const levelColor = (level) => {
           <div class="spinner"></div> <span class="pulse-text">加载规则摘要...</span>
         </div>
 
-        <div v-if="rulesSummary" class="rules-grid fade-in">
+        <div v-if="rulesSummary && !isEditingRules" class="rules-grid fade-in">
           <div class="rule-card">
             <h3>中文正文字体</h3>
             <p class="rule-val">{{ rulesSummary.default_font_east_asia }}</p>
@@ -350,14 +420,107 @@ const levelColor = (level) => {
           </div>
         </div>
 
+        <div v-if="isEditingRules && fullRules" class="rules-editor fade-in">
+           <!-- Form for document defaults -->
+           <div class="editor-section">
+             <div class="section-badge">基础设置</div>
+             <h3>全局默认格式 (Document)</h3>
+             <div class="editor-grid">
+               <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="fullRules.document.default_font_east_asia"/></div>
+               <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="fullRules.document.default_font_ascii"/></div>
+               <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" v-model.number="fullRules.document.default_font_size"/></div>
+               <div class="form-row"><label>行距</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.document.default_line_spacing"/></div>
+             </div>
+           </div>
+
+           <!-- Multi-level validators -->
+           <div class="editor-section">
+             <div class="section-badge">高阶规则</div>
+             <h3>高级验证器 (Validators)</h3>
+             <div class="editor-flex-row">
+               <label class="toggle-label"><input type="checkbox" v-model="fullRules.validators.check_hierarchy"/> 启用标题层级审查 (拦截伪造/跳段标题)</label>
+               <label class="toggle-label"><input type="checkbox" v-model="fullRules.validators.check_gb7714"/> 启用 GB/T 7714 参考文献格式验证</label>
+             </div>
+           </div>
+           
+           <div class="editor-section">
+             <div class="section-badge">页面</div>
+             <h3>页面布局 (Page Setup)</h3>
+             <div class="editor-grid">
+               <div class="form-row"><label>上边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.top_margin_cm"/></div>
+               <div class="form-row"><label>下边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.bottom_margin_cm"/></div>
+               <div class="form-row"><label>左边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.left_margin_cm"/></div>
+               <div class="form-row"><label>右边距(cm)</label><input class="editor-input" type="number" step="0.1" v-model.number="fullRules.page_setup.right_margin_cm"/></div>
+             </div>
+           </div>
+
+           <!-- Headings -->
+           <div class="editor-section" v-if="fullRules.headings">
+             <div class="section-badge">多级标题</div>
+             <h3>标题样式定义 (Headings)</h3>
+             <div v-for="(hRule, hKey) in fullRules.headings" :key="hKey" class="sub-editor" style="margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px dashed rgba(255,255,255,0.1)">
+               <h4 style="margin-top:0; color:#cbd5e1; font-size:1rem">{{ hRule.name || hKey }}</h4>
+               <div class="editor-grid">
+                 <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="hRule.font_east_asia"/></div>
+                 <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="hRule.font_ascii"/></div>
+                 <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.font_size"/></div>
+                 <div class="form-row"><label>段前间距(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.space_before"/></div>
+                 <div class="form-row"><label>段后间距(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="hRule.space_after"/></div>
+                 <div class="form-row"><label>对齐方式</label>
+                   <select class="editor-input" v-model="hRule.alignment">
+                     <option value="left">靠左对齐 (Left)</option>
+                     <option value="center">居中对齐 (Center)</option>
+                     <option value="right">靠右对齐 (Right)</option>
+                     <option value="justify">两端对齐 (Justify)</option>
+                   </select>
+                 </div>
+                 <label class="toggle-label" style="align-self:flex-end; padding-bottom:0.5rem;"><input type="checkbox" v-model="hRule.bold"/> 粗体 (Bold)</label>
+               </div>
+             </div>
+           </div>
+
+           <!-- Paragraphs & Captions -->
+           <div class="editor-section" v-if="fullRules.paragraphs">
+             <div class="section-badge">正文/题注</div>
+             <h3>段落与图表注样式</h3>
+             <template v-for="collection in [fullRules.paragraphs, fullRules.captions]">
+               <div v-for="(pRule, pKey) in collection" :key="pKey" class="sub-editor" style="margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px dashed rgba(255,255,255,0.1)">
+                 <h4 style="margin-top:0; color:#cbd5e1; font-size:1rem">{{ pRule.name || pKey }}</h4>
+                 <div class="editor-grid">
+                   <div class="form-row"><label>中文字体</label><input class="editor-input" v-model="pRule.font_east_asia"/></div>
+                   <div class="form-row"><label>英文字体</label><input class="editor-input" v-model="pRule.font_ascii"/></div>
+                   <div class="form-row"><label>字号(pt)</label><input class="editor-input" type="number" step="0.5" v-model.number="pRule.font_size"/></div>
+                   <div class="form-row"><label>首行缩进(字符)</label><input class="editor-input" type="number" v-model.number="pRule.first_line_indent"/></div>
+                   <div class="form-row"><label>对齐方式</label>
+                     <select class="editor-input" v-model="pRule.alignment">
+                       <option value="left">靠左对齐</option>
+                       <option value="center">居中对齐</option>
+                       <option value="right">靠右对齐</option>
+                       <option value="justify">两端对齐</option>
+                     </select>
+                   </div>
+                   <label class="toggle-label" style="align-self:flex-end; padding-bottom:0.5rem;"><input type="checkbox" v-model="pRule.bold"/> 粗体</label>
+                 </div>
+               </div>
+             </template>
+           </div>
+        </div>
+
         <div class="action-row" style="margin-top:2rem; flex-wrap:wrap; gap:0.8rem">
-          <button class="btn btn-ghost" @click="downloadRules('yaml')">⬇ 导出 YAML</button>
-          <button class="btn btn-ghost" @click="downloadRules('json')">⬇ 导出 JSON</button>
-          <label class="btn btn-ghost" style="cursor:pointer">
-            ⬆ 导入规则文件
-            <input type="file" accept=".yaml,.yml,.json" @change="importRules" hidden />
-          </label>
-          <button class="btn btn-primary" @click="reloadRules">🔄 热重载规则</button>
+          <template v-if="!isEditingRules">
+            <button class="btn btn-primary" style="background: linear-gradient(135deg, #f59e0b, #d97706);" @click="toggleEditRules">✏️ 可视化编辑规则</button>
+            <button class="btn btn-ghost" @click="downloadRules('yaml')">⬇ 导出 YAML</button>
+            <button class="btn btn-ghost" @click="downloadRules('json')">⬇ 导出 JSON</button>
+            <label class="btn btn-ghost" style="cursor:pointer">
+              ⬆ 导入规则文件
+              <input type="file" accept=".yaml,.yml,.json" @change="importRules" hidden />
+            </label>
+            <button class="btn btn-primary" @click="reloadRules">🔄 热重载规则</button>
+          </template>
+          <template v-else>
+            <button class="btn btn-primary" @click="saveRules">💾 保存并应用更改</button>
+            <button class="btn btn-ghost" @click="toggleEditRules">❌ 取消</button>
+          </template>
         </div>
       </div>
 
@@ -404,6 +567,20 @@ const levelColor = (level) => {
 </template>
 
 <style scoped>
+/* ── Editor ──────────────────────────────────────────────────────────────── */
+.rules-editor { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1rem; }
+.editor-section { background: rgba(30,41,59,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem; position: relative; }
+.editor-section h3 { margin: 0 0 1rem 0; font-size: 1.1rem; font-weight: 600; color: #e2e8f0; }
+.section-badge { position: absolute; top: 1.5rem; right: 1.5rem; background: rgba(99,102,241,0.1); color: #818cf8; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 500; }
+.editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+.form-row { display: flex; flex-direction: column; gap: 0.4rem; }
+.form-row label { font-size: 0.85rem; color: #94a3b8; }
+.editor-input { background: rgba(15,23,42,0.6); border: 1px solid rgba(255,255,255,0.1); color: #f8fafc; padding: 0.6rem 0.8rem; border-radius: 6px; font-family: inherit; transition: all 0.2s; }
+.editor-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.2); }
+.editor-flex-row { display: flex; flex-direction: column; gap: 0.8rem; }
+.toggle-label { display: flex; align-items: center; gap: 0.5rem; color: #cbd5e1; font-size: 0.95rem; cursor: pointer; }
+.toggle-label input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: #6366f1; }
+
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 .app-shell {
   display: flex;
