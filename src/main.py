@@ -17,11 +17,14 @@ from docx import Document
 from docx.shared import RGBColor, Pt
 import tempfile
 
-from engine.rule_loader import RuleLoader
-from engine.validator import Validator
-from engine.docx_parser import DocxParser
-from engine.logger import AppLogger
-from engine.fixer import DocumentFixer
+# ── 旧引擎（Shim 层，保持向下兼容）──────────────────────────────────────────
+from infrastructure.logger import AppLogger
+
+# ── 新Clean Architecture 层（直接路径）────────────────────────────────────────
+from use_cases.rule_config import RuleLoader
+from use_cases.validator_pipeline import ValidatorPipeline
+from infrastructure.parsers.docx_parser import DocxParser
+from infrastructure.reporters.word_reporter import AnnotationReporter, DocumentFixer
 
 # ─── 路径解析：兼容 PyInstaller 打包与直接开发运行 ───────────────────────────
 #
@@ -59,7 +62,8 @@ else:
 
 app_logger  = AppLogger(log_dir=log_dir)
 rule_loader = RuleLoader(rules_path)
-validator   = Validator(rule_loader.get_rules())
+# ValidatorPipeline 基于 RuleConfig（Pydantic 强类型），不再依赖裸字典
+_pipeline   = ValidatorPipeline(rule_loader.get_rules())
 
 
 app = FastAPI(title="论文格式校验 API", version="2.0.0")
@@ -74,36 +78,12 @@ app.add_middleware(
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def _rebuild_validator():
-    """规则热更新后重建 Validator 实例。"""
-    global validator
-    validator = Validator(rule_loader.get_rules())
+def _rebuild_pipeline() -> None:
+    """规则热更新后重建 ValidatorPipeline 实例。"""
+    global _pipeline
+    _pipeline = ValidatorPipeline(rule_loader.get_rules())
 
-def _inject_comment_to_docx(source_path: str, issues: list) -> bytes:
-    """
-    将校验结果以 Word 批注形式注入原始文档副本，返回字节流。
-    每个 issue 对应其 index 段落，附加红色高亮批注。
-    """
-    doc = Document(source_path)
-    issue_map: dict[int, list] = {}
-    for issue in issues:
-        pid = issue.get("id", 0)
-        issue_map.setdefault(pid, []).append(issue)
-
-    for para_idx, para in enumerate(doc.paragraphs, start=1):
-        if para_idx not in issue_map:
-            continue
-        msgs = " | ".join(f"[{i['type']}] {i['message']}" for i in issue_map[para_idx])
-        # Append a red-colored run at end of paragraph acting as inline comment
-        run = para.add_run(f"  ⚠ {msgs}")
-        run.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
-        run.font.size = Pt(9)
-        run.italic = True
-
-    buf = io.BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf.read()
+# _inject_comment_to_docx 已迁移至 AnnotationReporter（infrastructure/reporters/word_reporter.py）
 
 
 # ─── API: Document Checking ──────────────────────────────────────────────────
@@ -120,18 +100,31 @@ async def check_document(file: UploadFile = File(...)):
 
     try:
         app_logger.info(f"开始校验文件: {file.filename}", extra={"filename": file.filename})
-        parser = DocxParser(temp_path)
-        parsed_data = parser.parse()
-        issues = validator.validate(parsed_data)
+
+        # 新架构：DocxParser → DocumentModel → ValidatorPipeline（Generator）
+        parser    = DocxParser(temp_path)
+        doc_model = parser.parse()
+
+        all_issues = []
+        for event in _pipeline.run(doc_model):
+            for issue in event.issues:
+                all_issues.append({
+                    "id":         issue.id,
+                    "para_index": issue.para_index,
+                    "issue_code": issue.issue_code.value,
+                    "type":       issue.severity.value,
+                    "context":    issue.context,
+                    "message":    issue.message,
+                })
 
         app_logger.info(
-            f"校验完成: {file.filename} → 发现 {len(issues)} 个问题",
-            extra={"filename": file.filename, "issue_count": len(issues)}
+            f"校验完成: {file.filename} → 发现 {len(all_issues)} 个问题",
+            extra={"filename": file.filename, "issue_count": len(all_issues)}
         )
         return JSONResponse(content={
-            "issues": issues,
+            "issues": all_issues,
             "filename": file.filename,
-            "total": len(issues),
+            "total": len(all_issues),
             "checked_at": datetime.now().isoformat()
         })
     except Exception as e:
@@ -172,8 +165,22 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
         f.write(raw)
 
     try:
-        issues = json.loads(issues_json)
-        annotated_bytes = _inject_comment_to_docx(temp_path, issues)
+        issues_raw = json.loads(issues_json)
+        # 使用新 AnnotationReporter（接受旧格式 dict list 以保持 API 兼容）
+        from domain.models import Issue, IssueCode, IssueSeverity
+        domain_issues = [
+            Issue(
+                id=i.get("id", 0),
+                para_index=i.get("para_index", i.get("id", 0)),
+                issue_code=IssueCode(i.get("issue_code", "W005")),
+                severity=IssueSeverity(i.get("type", "Warn")),
+                context=i.get("context", ""),
+                message=i.get("message", ""),
+            )
+            for i in issues_raw
+        ]
+        reporter = AnnotationReporter(temp_path)
+        annotated_bytes = reporter.generate(domain_issues)
         out_name = file.filename.replace(".docx", "_校验批注.docx")
         return Response(
             content=annotated_bytes,
@@ -206,9 +213,10 @@ async def fix_document(file: UploadFile = File(...)):
 
     try:
         app_logger.info(f"开始自动修复文件: {file.filename}")
+        # 新 DocumentFixer 接受 RuleConfig（Pydantic 强类型）
         fixer = DocumentFixer(temp_path, rule_loader.get_rules())
         fixed_bytes = fixer.fix()
-        
+
         out_name = file.filename.replace(".docx", "_格式已修复.docx")
         app_logger.info(f"一键自动修复完成: {out_name}")
         
@@ -260,7 +268,7 @@ async def export_rules_json():
 @app.get("/api/rules/full_json")
 async def get_full_rules_json():
     """返回完整规则JSON对象（用于可视化编辑器绑定）。"""
-    return JSONResponse(content=rule_loader.get_rules())
+    return JSONResponse(content=rule_loader.get_rules().model_dump())
 
 @app.post("/api/rules/save_json")
 async def save_rules_json(rules: Dict[Any, Any]):
@@ -268,7 +276,7 @@ async def save_rules_json(rules: Dict[Any, Any]):
     try:
         json_str = json.dumps(rules, ensure_ascii=False)
         result = rule_loader.import_from_json(json_str)
-        _rebuild_validator()
+        _rebuild_pipeline()
         app_logger.info("规则文件通过可视化编辑器成功覆盖")
         return JSONResponse(content=result)
     except Exception as e:
@@ -288,7 +296,7 @@ async def import_rules(file: UploadFile = File(...)):
             result = rule_loader.import_from_json(content)
         else:
             result = rule_loader.import_from_yaml(content)
-        _rebuild_validator()
+        _rebuild_pipeline()
         app_logger.info(f"规则文件已更新: {fname}", extra={"file": fname})
         return JSONResponse(content=result)
     except ValueError as e:
@@ -301,7 +309,7 @@ async def reload_rules():
     """强制从磁盘热重载规则（无需重启服务）。"""
     try:
         rule_loader.reload()
-        _rebuild_validator()
+        _rebuild_pipeline()
         app_logger.info("规则热重载成功")
         return JSONResponse(content={"status": "ok", "message": "规则热重载完成"})
     except Exception as e:

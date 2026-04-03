@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.0.0 — 2026-04-03
+
+### 🏗️ 架构大革命 (Clean Architecture Revolution)
+
+**核心架构 (Core Architecture)**
+- **DDD 分层重构**：从单体“上帝类”演进为严格的 Domain / Use Cases / Infrastructure 三层模型。通过物理路径隔离强制执行业务与 I/O 的彻底解耦。
+- **ADM (Abstract Document Model)**：引入抽象文档模型，使校验插件面向 ADM 编程，不再依赖具体的 python-docx 库。
+- **生成器管道 (ValidatorPipeline)**：基于 Generator 驱动校验任务，原生支持非阻塞式实时进度上报，解耦了业务逻辑与 UI 推送。
+- **单一职责插件化 (SRP)**：原 `Validator` 拆解为 `FontPlugin`, `SpacingPlugin`, `HierarchyPlugin`, `CaptionSeqPlugin`, `PageMarginPlugin` 等独立可插拔插件。
+- **依赖倒置 (DIP)**：通过 `domain/interfaces` 建立接口契约，实现核心层由于对外部库（fastapi, docx）的零引用。
+
+**配置与规则管理 (Rule Engine)**
+- **Pydantic 强类型接入**：使用 `RuleConfig` 代替脆弱的嵌套字典，支持规则热加载、默认值自动填充及 Schema 级联合法性校验。
+- **深度校验能力**：新增图表题注编号连续性校验、跨级标题（H1 直接到 H3）侦测、以及页面边距合规性验证。
+
+**工程化与标准化 (Engineering & Standards)**
+- **架构标准**：建立根目录 [ARCHITECTURE_STANDARD.md](file:///ARCHITECTURE_STANDARD.md)，固化分层原则与插件开发 SOP。
+- **架构卫士 (Skill Enforcement)**：同步更新 `clean-arch-enforcer` 技能与其配套审计 SOP。
+- **环境隔离验证**：通过 `validate_arch.py` 等脚本验证了内层代码的纯净度。
+
+---
+
 ## v0.1.4 — 2026-04-03
 
 ### 🐛 Bug Fixes
