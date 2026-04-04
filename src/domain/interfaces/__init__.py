@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List
 from domain.models import (
-    ParagraphNode, SectionNode, DocumentModel, Issue, RuleContext
+    ParagraphNode, SectionNode, DocumentModel, Issue, RuleContext, Patch
 )
 
 

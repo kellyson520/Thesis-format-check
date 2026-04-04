@@ -7,12 +7,7 @@ from unittest.mock import MagicMock, patch
 # Add src to Python Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-# Mock docx dependencies
-sys.modules['docx'] = MagicMock()
-sys.modules['docx.shared'] = MagicMock()
-sys.modules['docx.enum.text'] = MagicMock()
-sys.modules['docx.oxml.ns'] = MagicMock()
-sys.modules['docx.oxml'] = MagicMock()
+
 
 from domain.models import Issue, IssueCode, IssueSeverity, Patch
 from use_cases.fixer_pipeline import FixerPipeline

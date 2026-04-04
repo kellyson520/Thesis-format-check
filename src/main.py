@@ -97,6 +97,38 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(AuthMiddleware)
 
+# ─── Global Exception Handlers ──────────────────────────────────────────────
+def setup_exception_handlers(app: FastAPI):
+    """
+    全局异常拦截器：
+    1. 确保所有未捕获异常都被记录到 app.log (含 Stacktrace)。
+    2. 向前端返回结构化 JSON 而不是 500 HTML 页面。
+    """
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        app_logger.error(f"Global error on {request.url.path}: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Internal Server Error",
+                "message": str(exc),
+                "type": type(exc).__name__,
+                "path": request.url.path
+            }
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        # 记录已知业务异常（可选建议：Warn 级别）
+        app_logger.warning(f"HTTP {exc.status_code} on {request.url.path}: {exc.detail}")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": "Client/Business Error", "message": exc.detail}
+        )
+
+setup_exception_handlers(app)
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _rebuild_pipeline() -> None:
@@ -131,6 +163,7 @@ async def check_document_stream(file: UploadFile = File(...)):
                     data = json.dumps(event.to_dict(), ensure_ascii=False)
                     yield f"data: {data}\n\n"
             except Exception as inner_e:
+                app_logger.error(f"SSE 流式处理中断: {inner_e}", exc_info=True)
                 # 中途崩溃时，发送一个特殊的 error 事件
                 err_data = json.dumps({"type": "error", "message": f"校验中断: {inner_e}"})
                 yield f"data: {err_data}\n\n"
@@ -238,8 +271,8 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
         if os.path.exists(temp_path):
             try:
                 os.remove(temp_path)
-            except Exception:
-                pass
+            except Exception as e:
+                app_logger.debug(f"清理导出临时文件失败: {e}")
 
 
 @app.post("/api/fix")
@@ -498,7 +531,8 @@ async def clear_cache():
                 elif os.path.isdir(fp):
                     shutil.rmtree(fp)
                     deleted += 1
-            except: pass
+            except Exception as e: 
+                app_logger.debug(f"清理缓存项失败 {fp}: {e}")
             
     # 只清除旧日志，保留当前日志文件本身
     app_logger.clear_logs() 

@@ -197,7 +197,15 @@ class ValidatorPipeline:
         for i, para in enumerate(doc_model.paragraphs):
             para_issues: List[Issue] = []
             for plugin in self._para_plugins:
-                para_issues.extend(plugin.check(para, context))
+                try:
+                    para_issues.extend(plugin.check(para, context))
+                except Exception as plugin_exc:
+                    # 获取插件名，记录错误，但不中断其余插件
+                    p_name = type(plugin).__name__
+                    # 避免对每个段落都打错误日志造成刷屏，如果是大规模崩溃，外层应感应
+                    # 但根据"拒绝静默错误"原则，此处必须有迹可循
+                    from infrastructure.logger import get_logger
+                    get_logger(__name__).error(f"Plugin {p_name} failed on para {i}: {plugin_exc}")
 
             # 更新上下文状态机
             context = _update_context(context, para, self._style_mapper)

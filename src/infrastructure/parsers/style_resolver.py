@@ -11,10 +11,12 @@ Infrastructure Layer — StyleResolver（Word 样式继承链解析器）
   - 不含任何业务判断逻辑（"正确"的概念属于 Plugin 层）。
 """
 from __future__ import annotations
+import logging
 from typing import Optional, Dict, Any
 import docx
 from docx.oxml.ns import qn
 
+logger = logging.getLogger(__name__)
 
 # Word XML 数值属性名常量
 _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -135,17 +137,23 @@ def _read_ppr_bool(pPr, tag_name: str) -> Optional[bool]:
     val = el.get(qn("w:val"))
     return False if val == "0" else True
 
-def _entry_from_style(style_el) -> _StyleEntry:
-    """从样式的 XML 元素中同时收集 <w:rPr> 和 <w:pPr> 属性。"""
+def _entry_from_rpr(rPr) -> _StyleEntry:
+    """从 <w:rPr> 元素提取属性到 _StyleEntry。"""
     e = _StyleEntry()
-    if style_el is None: return e
-    
-    rPr = style_el.find(qn("w:rPr"))
     if rPr is not None:
         e.bold           = _read_rpr_bold(rPr)
         e.size_pt        = _read_rpr_size(rPr)
         e.ascii_font     = _read_rpr_font_ascii(rPr)
         e.east_asia_font = _read_rpr_font_east_asia(rPr)
+    return e
+
+
+def _entry_from_style(style_el) -> _StyleEntry:
+    """从样式的 XML 元素中同时收集 <w:rPr> 和 <w:pPr> 属性。"""
+    if style_el is None: return _StyleEntry()
+    
+    rPr = style_el.find(qn("w:rPr"))
+    e = _entry_from_rpr(rPr)
     
     pPr = style_el.find(qn("w:pPr"))
     if pPr is not None:
@@ -196,8 +204,8 @@ class StyleResolver:
                 if style.element is not None:
                     rPr_el = style.element.find(qn("w:rPr"))
                     rPr = rPr_el
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to extract rPr for style {sname}: {e}")
             raw[sname] = _entry_from_style(style.element)
             # 记录父样式名
             base = getattr(style, "base_style", None)
@@ -253,7 +261,8 @@ class StyleResolver:
                 return _StyleEntry()
             rPr = rPrDefault.find(qn("w:rPr"))
             return _entry_from_rpr(rPr)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error reading docDefaults from Word XML: {e}")
             return _StyleEntry()
 
     # ── 查询接口 ────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@
 
 | 任务标识 | 任务描述 | 开始日期 | 结束日期 | 进度 | 传送门 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| 20260404_Fix_Dependency_Missing | 紧急修复：补齐 requirements.txt 中缺失的 httpx 依赖 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_System/20260404_Fix_Dependency_Missing/) |
 | 20260404_Ship_v1.2.4 | 打包到 GitHub 并发布 v1.2.4：完成引擎稳定性修复与在线更新上线 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_System/20260404_Ship_v1.2.4/) |
 | 20260404_RealGitHubUpdateCheck | 实现在线 GitHub 检查更新机制：从随机模拟升级为真实 API 比对 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_FormatCheck/20260404_RealGitHubUpdateCheck/) |
 | 20260404_FixEngineDisappearing | 修复引擎运行中状态消失问题：后端稳定性与 WebSocket 中断处理 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_FormatCheck/20260404_FixEngineDisappearing/) |
@@ -18,6 +19,7 @@
 | 任务标识 | 任务描述 | 开始日期 | 结束日期 | 进度 | 传送门 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 20260403_FixRuleManagementCrash_P0 | 修复规则管理功能：解决前端崩溃（页面纯色）与后端日志缺失问题 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_Frontend/20260403_FixRuleManagementCrash_P0/) |
+| 20260404_ImproveExceptionCapturing | 完善整个项目的异常捕获，建立全局异常处理机制并拒绝静默错误 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_System/20260404_Improve_Exception_Capturing/) |
 | 20260403_PluginDrivenConfig_P1 | 插件驱动配置系统重构：去中心化 Pydantic 模型 & 声明式配置声明 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_Standardization/20260403_PluginDrivenConfig_P1/) |
 | 20260403_AddReDetectButton_P1 | 增加重新检测功能按钮：支持已上传文件一键重校验 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_FormatCheck/20260403_AddReDetectButton_P1/) |
 | 20260403_SetupStandardDirectory | 标准化目录初始化：整合架构、插件及开发规范 | 2026-04-03 | 2026-04-03 | 100% | [📂 查看](./Workstream_Standardization/20260403_SetupStandardDirectory_P1/) |

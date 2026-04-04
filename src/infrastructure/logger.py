@@ -57,24 +57,32 @@ class AppLogger:
         try:
             with open(self.json_log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        except Exception:
-            pass  # Never let logging bring down the engine
+        except Exception as e:
+            # Fallback to stderr if file logging fails, avoiding silent failure of the logger itself
+            import sys
+            print(f"CRITICAL: Logging to {self.json_log_file} failed: {e}", file=sys.stderr)
 
-    def info(self, message: str, extra: dict = None):
-        self.logger.info(message)
-        self._write_json("INFO", message, extra)
+    def log(self, level: int, message: str, *args, **kwargs):
+        """通用日志方法，支持标配 logging 语义。"""
+        self.logger.log(level, message, *args, **kwargs)
+        # 结构化日志仅记录消息字符串
+        lvl_name = logging.getLevelName(level)
+        self._write_json(lvl_name, message % args if args else message, kwargs.get("extra"))
 
-    def warning(self, message: str, extra: dict = None):
-        self.logger.warning(message)
-        self._write_json("WARNING", message, extra)
+    def info(self, message: str, *args, **kwargs):
+        self.log(logging.INFO, message, *args, **kwargs)
 
-    def error(self, message: str, extra: dict = None):
-        self.logger.error(message)
-        self._write_json("ERROR", message, extra)
+    def warning(self, message: str, *args, **kwargs):
+        self.log(logging.WARNING, message, *args, **kwargs)
 
-    def debug(self, message: str, extra: dict = None):
-        self.logger.debug(message)
-        self._write_json("DEBUG", message, extra)
+    def error(self, message: str, *args, **kwargs):
+        # 默认错误日志开启 exc_info
+        if "exc_info" not in kwargs:
+            kwargs["exc_info"] = True
+        self.log(logging.ERROR, message, *args, **kwargs)
+
+    def debug(self, message: str, *args, **kwargs):
+        self.log(logging.DEBUG, message, *args, **kwargs)
 
     def get_recent_logs(self, limit: int = 100, level_filter: str = None) -> list:
         """从结构化日志文件中读取最近 N 条，可按级别过滤。"""
@@ -99,3 +107,7 @@ class AppLogger:
         with open(self.json_log_file, "w", encoding="utf-8") as f:
             f.write("")
         self.info("日志已手动清空", extra={"action": "clear_logs"})
+
+def get_logger(name: str = "thesis_checker"):
+    """获取预配置的日志记录器。"""
+    return logging.getLogger(name)

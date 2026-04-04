@@ -121,7 +121,8 @@ const uploadFile = async (file) => {
             issues.value.push(...event.issues)
           } else if (event.event_type === 'done') {
             validationDone.value = true
-            checkedAt.value = new Date().toLocaleString()
+            const now = new Date()
+            checkedAt.value = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
           } else if (event.type === 'error') {
             alert('校验中断: ' + event.message)
           }
@@ -516,7 +517,7 @@ const levelColor = (level) => {
               <span class="stat-label">问题总计</span>
             </div>
             <div class="stat-card">
-              <span class="stat-num" style="color:#4ade80; font-size:0.9rem">{{ checkedAt ? checkedAt.split('T')[1].split('.')[0] : '--' }}</span>
+              <span class="stat-num" style="color:#4ade80; font-size:0.9rem">{{ checkedAt ? checkedAt.replace('T', ' ').split('.')[0].split(' ').pop() : '--' }}</span>
               <span class="stat-label">校验时间</span>
             </div>
           </div>

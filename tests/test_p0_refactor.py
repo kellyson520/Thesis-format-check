@@ -6,11 +6,7 @@ from unittest.mock import MagicMock, patch
 # Add src to Python Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-# Mock docx before anything else
-sys.modules['docx'] = MagicMock()
-sys.modules['docx.oxml'] = MagicMock()
-sys.modules['docx.oxml.ns'] = MagicMock()
-sys.modules['docx.enum.text'] = MagicMock()
+
 
 from domain.models import ParagraphNode, RuleContext, DocumentSection
 from use_cases.style_mapper import StyleMapper

@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.2.6 — 2026-04-04
+
+### 🛡️ 全局异常处理与稳定性加固 (Global Exception Handling & Stability)
+
+**异常拦截与反馈 (Global Sanitization)**
+- **全局拦截拦截器**：在 `src/main.py` 中实现了 `setup_exception_handlers`，捕获所有未捕获的 `Exception` 与 `HTTPException`，将 500 错误转化为结构化 JSON 反馈，拒绝前端由于后端崩溃导致的白屏。
+- **抗灾故障隔离**：在 `ValidatorPipeline` 的段落校验循环中增加了分片 `try-except`，确保单个插件的崩溃仅会记录错误日志，不再导致整个文档校验流程中断。
+- **清除静默错误**：彻底清理了全项目中所有的 `except: pass` 块，确保所有系统异常均有迹可循。
+
+**核心组件性能与鲁棒性 (Core Robustness)**
+- **日志系统加固**：升级 `AppLogger` 支持 `exc_info` 全量堆栈记录，并在日志文件不可写时具备自动退避至 `sys.stderr` 的自愈能力。
+- **测试环境隔离**：修正了 `test_p0_refactor.py` 和 `test_p1_fixer.py` 中由于全局 `sys.modules` 污染导致的集成测试 Mock 泄露问题，确保测试套件运行的独立性。
+
+
 ## v1.2.5 — 2026-04-04
 
 ### 🚑 依赖补丁 (Dependency Hotfix)
