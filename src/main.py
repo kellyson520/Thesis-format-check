@@ -231,17 +231,12 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
     上传原始 docx + issues JSON，返回附批注的新 docx 文件流。
     前端可直接触发浏览器下载。
     """
-    temp_dir = os.path.join(tempfile.gettempdir(), "thesis_checker_temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, f"_export_{file.filename}")
-
-    raw = await file.read()
-    with open(temp_path, "wb") as f:
-        f.write(raw)
-
     try:
+        app_logger.info(f"开始导出批注文件: {file.filename}")
+        raw = await file.read()
         issues_raw = json.loads(issues_json)
-        # 使用新 AnnotationReporter（接受旧格式 dict list 以保持 API 兼容）
+
+        # 使用新 AnnotationReporter（支持内存流）
         from domain.models import Issue, IssueCode, IssueSeverity
         domain_issues = [
             Issue(
@@ -254,10 +249,26 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
             )
             for i in issues_raw
         ]
-        reporter = AnnotationReporter(temp_path)
+        reporter = AnnotationReporter(io.BytesIO(raw))
         annotated_bytes = reporter.generate(domain_issues)
-        from urllib.parse import quote
         out_name = file.filename.replace(".docx", "_校验批注.docx")
+        
+        app_logger.info(f"批注生成完成 (Zero-Disk): {out_name}")
+
+        # P5: 若在 EXE (frozen) 模式下，自动在本地保存一份
+        if getattr(sys, 'frozen', False):
+            try:
+                exe_dir = os.path.dirname(sys.executable)
+                output_dir = os.path.join(exe_dir, "output")
+                os.makedirs(output_dir, exist_ok=True)
+                local_save_path = os.path.join(output_dir, out_name)
+                with open(local_save_path, "wb") as f:
+                    f.write(annotated_bytes)
+                app_logger.info(f"EXE模式本地备份已保存: {local_save_path}")
+            except Exception as save_err:
+                app_logger.warning(f"EXE模式本地备份失败: {save_err}")
+
+        from urllib.parse import quote
         encoded_filename = quote(out_name)
         return Response(
             content=annotated_bytes,
@@ -265,14 +276,8 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
         )
     except Exception as e:
-        app_logger.error(f"批注导出失败: {e}")
+        app_logger.error(f"批注导出失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception as e:
-                app_logger.debug(f"清理导出临时文件失败: {e}")
 
 
 @app.post("/api/fix")
@@ -294,11 +299,25 @@ async def fix_document(file: UploadFile = File(...)):
             
         # 2. 执行修复
         fixed_bytes = _fix_pipeline.apply_fixes(raw, all_issues)
-
         out_name = file.filename.replace(".docx", "_格式已修复.docx")
+
+        app_logger.info(f"一键自动修复完成 (Zero-Disk): {out_name}")
+
+        # P5: 若在 EXE (frozen) 模式下，自动在本地保存一份
+        if getattr(sys, 'frozen', False):
+            try:
+                exe_dir = os.path.dirname(sys.executable)
+                output_dir = os.path.join(exe_dir, "output")
+                os.makedirs(output_dir, exist_ok=True)
+                local_save_path = os.path.join(output_dir, out_name)
+                with open(local_save_path, "wb") as f:
+                    f.write(fixed_bytes)
+                app_logger.info(f"EXE模式修复文件已备份: {local_save_path}")
+            except Exception as save_err:
+                app_logger.warning(f"EXE模式本地备份失败: {save_err}")
+
         from urllib.parse import quote
         encoded_filename = quote(out_name)
-        app_logger.info(f"一键自动修复完成: {out_name}")
         return Response(
             content=fixed_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

@@ -47,8 +47,9 @@ def _get_rfonts_attr(run, attr: str):
             rFonts = rPr.find(_QNAME_RFONTS)
             if rFonts is not None:
                 return rFonts.get(attr)
-    except AttributeError:
-        pass
+    except AttributeError as e:
+        from infrastructure.logger import get_logger
+        get_logger(__name__).debug(f"XML rFonts attribute extraction skipped: {e}")
     return None
 
 

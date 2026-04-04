@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.2.7 — 2026-04-04
+
+### 🚀 EXE 本地自动保存与 Zero-Disk 闭环 (EXE Auto-Save & Zero-Disk Finalized)
+
+**EXE 本地体验优化 (EXE Mode Experience)**
+- **本地自动存盘**：实现了在导出批注文件和修复文件时，自动在 `.exe` 同级目录的 `output/` 文件夹下生成物理备份。这解决了打包环境下由于浏览器下载目录不明确导致的“找不到文件”问题。
+- **路径自适应**：在 `frozen` 模式下智能识别当前运行目录。
+
+**全链路内存流 (True Zero-Disk IO)**
+- **重构 AnnotationReporter**：彻底支持 `io.BytesIO` 内存流输入，不再需要通过磁盘临时文件传递原始 Docx 数据。
+- **接口逻辑收缩**：完全移除了 `src/main.py` 导出逻辑中的 `tempfile.gettempdir()` 模块引用，实现了真正的 Zero-Disk 解析与回报流程。
+
+**稳定性与代码质量 (Stability & Code Quality)**
+- **崩溃风险预防**：修复了 `api/fix` 接口在之前的重构中因代码偏移导致的 `out_name` 未定义 `NameError`。
+- **清除静默异常**：修复了 `DocxParser` 中残留的一处 `except: pass` 块，确保解析逻辑出现属性缺失时会被 `debug` 日志捕获而不再“无声消失”。
+- **架构瘦身**：移除冗余的 `DocumentFixer` 类，将格式修复逻辑完全统一到 `DocxFixer` 架构中。
+
 ## v1.2.6 — 2026-04-04
 
 ### 🛡️ 全局异常处理与稳定性加固 (Global Exception Handling & Stability)
