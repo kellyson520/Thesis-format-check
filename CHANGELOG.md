@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.4 — 2026-04-04
+
+### 🛠️ 校验引擎稳定性与 SSE 状态修复 (Engine Stability & SSE State Fixes)
+
+**状态流转修复 (SSE State Recovery)**
+- **修复状态消失 BUG**：解决了 `ValidatorPipeline` 流式返回的事件字段 (`type` vs `event_type`) 与前端不匹配的问题。
+- **对齐完成信号**：将后端 `complete` 事件重命名为前端预期的 `done`，确保校验完成后“引擎运行中”状态能正确切换至结果面板。
+- **流式 Issue 结构补全**：为流式返回的 Issue 对象补齐了 `type` (severity) 和 `fixable` 字段，确保实时渲染的卡片样式正确且显示修复建议。
+
+**传输编码固化 (Encoding Stability)**
+- **文件名编码修复**：解决了在导出带中文文件名的 docx 时由于 `attachment; filename` 导致的 `UnicodeEncodeError` (ordinal not in range(128))。统一使用 `RFC 5987 (filename*)` 标准进行 URL 编码传输。
+
 ## v1.2.3 — 2026-04-03
 
 ### 🔧 规则管理中心稳定性修复 (Rule Management Stability Fix)

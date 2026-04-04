@@ -7,10 +7,12 @@ import os
 # Add src to Python Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-from main import app
+from main import app, _API_TOKEN
+import json
 
 def test_full_api_loop():
     client = TestClient(app)
+    headers = {"X-Token": _API_TOKEN}
     
     # 1. Create a dummy Docx
     doc = docx.Document()
@@ -25,6 +27,7 @@ def test_full_api_loop():
     # 2. Test /api/check (Zero-Disk IO)
     response = client.post(
         "/api/check",
+        headers=headers,
         files={"file": ("test.docx", content, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
     )
     assert response.status_code == 200
@@ -32,9 +35,33 @@ def test_full_api_loop():
     assert "issues" in data
     print(f"Check success: {data['total']} issues found.")
     
-    # 3. Test /api/fix (Zero-Disk IO + FixerPipeline)
+    # 3. Test /api/check/stream (SSE)
+    response_stream = client.post(
+        "/api/check/stream",
+        headers=headers,
+        files={"file": ("test.docx", content, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+    )
+    assert response_stream.status_code == 200
+    # Collect events
+    events = []
+    for line in response_stream.iter_lines():
+        if line.startswith("data: "):
+            events.append(json.loads(line[6:]))
+    
+    # Verify events
+    assert any(e.get("event_type") == "progress" for e in events)
+    assert any(e.get("event_type") == "done" for e in events)
+    # Check issue structure in stream
+    progress_event = next(e for e in events if e.get("event_type") == "progress")
+    if progress_event.get("issues"):
+        assert "type" in progress_event["issues"][0]
+    
+    print("Stream success: SSE events validated.")
+
+    # 4. Test /api/fix (Zero-Disk IO + FixerPipeline)
     response_fix = client.post(
         "/api/fix",
+        headers=headers,
         files={"file": ("test.docx", content, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
     )
     assert response_fix.status_code == 200

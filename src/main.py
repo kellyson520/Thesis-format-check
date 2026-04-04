@@ -29,6 +29,7 @@ from use_cases.fixer_pipeline import FixerPipeline
 from infrastructure.parsers.docx_parser import DocxParser
 from infrastructure.reporters.docx_fixer import DocxFixer
 from infrastructure.reporters.word_reporter import AnnotationReporter
+from infrastructure.updater import GitHubUpdater
 
 
 # ─── 路径解析：兼容 PyInstaller 打包与直接开发运行 ───────────────────────────
@@ -222,11 +223,13 @@ async def export_annotated(file: UploadFile = File(...), issues_json: str = "[]"
         ]
         reporter = AnnotationReporter(temp_path)
         annotated_bytes = reporter.generate(domain_issues)
+        from urllib.parse import quote
         out_name = file.filename.replace(".docx", "_校验批注.docx")
+        encoded_filename = quote(out_name)
         return Response(
             content=annotated_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{out_name}"'}
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
         )
     except Exception as e:
         app_logger.error(f"批注导出失败: {e}")
@@ -260,12 +263,13 @@ async def fix_document(file: UploadFile = File(...)):
         fixed_bytes = _fix_pipeline.apply_fixes(raw, all_issues)
 
         out_name = file.filename.replace(".docx", "_格式已修复.docx")
+        from urllib.parse import quote
+        encoded_filename = quote(out_name)
         app_logger.info(f"一键自动修复完成: {out_name}")
-        
         return Response(
             content=fixed_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{out_name.encode("utf-8").decode("latin-1")}"'}
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
         )
     except Exception as e:
         app_logger.error(f"自动化修复失败: {e}")
@@ -504,19 +508,17 @@ async def clear_cache():
 
 @app.get("/api/settings/check_update")
 async def check_update():
-    """模拟检查更新（实际可对接 GitHub API 或版本服务器）。"""
-    # 模拟 30% 概率有新版本
-    import random
-    has_update = random.random() < 0.3
-    if has_update:
-        return {
-            "has_update": True, 
-            "current": VERSION,
-            "latest": "1.2.1",
-            "changelog": "1. 优化了表格解析性能\n2. 修复了孤行控制检查的一个边缘崩溃"
-        }
-    else:
-        return {"has_update": False, "current": VERSION}
+    """实现在线 GitHub 检查更新机制。"""
+    app_logger.info("正在检查在线更新...")
+    updater = GitHubUpdater()
+    result = await updater.check_latest(VERSION)
+    
+    if result.get("has_update"):
+        app_logger.info(f"发现新版本: {result['latest']}")
+    elif "error" in result:
+        app_logger.warning(f"检查更新失败: {result['error']}")
+    
+    return JSONResponse(content=result)
 
 
 
@@ -560,7 +562,7 @@ if __name__ == "__main__":
         url = f"http://127.0.0.1:{listen_port}/?token={_API_TOKEN}"
 
     webview.create_window(
-        title=f"论文格式智能校验 · v1.2.0 (Port: {listen_port})",
+        title=f"论文格式智能校验 · v{VERSION} (Port: {listen_port})",
         url=url,
         width=1200,
         height=840,

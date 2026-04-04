@@ -46,12 +46,22 @@ class ValidationEvent:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "type":     self.event_type,
-            "progress": self.progress,
-            "issues":   [i.model_dump() for i in self.issues],
-            "total":    self.total,
-            "current":  self.current,
+            "event_type": self.event_type,  # 兼容前端 event_type 指向 (App.vue:115)
+            "type":       self.event_type,  # 原始 type 字段
+            "progress":   self.progress,
+            "issues":     [self._issue_to_dict(i) for i in self.issues],
+            "total":      self.total,
+            "current":    self.current,
         }
+
+    def _issue_to_dict(self, issue: Issue) -> Dict[str, Any]:
+        """将 Issue 转换为前端兼容的字典格式（含 type 映射）。"""
+        d = issue.model_dump()
+        d["type"] = issue.severity.value      # 前端预期 iss.type (App.vue:545)
+        d["issue_code"] = issue.issue_code.value
+        if issue.suggested_patch:
+            d["fixable"] = True
+        return d
 
 
 # ─── 文档区域状态机（内部辅助函数） ──────────────────────────────────────────
@@ -207,7 +217,7 @@ class ValidatorPipeline:
 
         # ── 2. 最终完成事件 ─────────────────────────────────────────────────
         yield ValidationEvent(
-            event_type="complete",
+            event_type="done",  # 前端预期 done 以便隐藏 loading (App.vue:122)
             progress=100,
             issues=[],
             total=total,
