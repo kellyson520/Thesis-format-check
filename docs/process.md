@@ -4,7 +4,7 @@
 
 | 任务标识 | 任务描述 | 开始日期 | 结束日期 | 进度 | 传送门 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 20260404_Ship_v1.2.4 | 打包到 GitHub 并发布 v1.2.4：完成引擎稳定性修复与在线更新上线 | 2026-04-04 | - | 10% | [📂 查看](./Workstream_System/20260404_Ship_v1.2.4/) |
+| 20260404_Ship_v1.2.4 | 打包到 GitHub 并发布 v1.2.4：完成引擎稳定性修复与在线更新上线 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_System/20260404_Ship_v1.2.4/) |
 | 20260404_RealGitHubUpdateCheck | 实现在线 GitHub 检查更新机制：从随机模拟升级为真实 API 比对 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_FormatCheck/20260404_RealGitHubUpdateCheck/) |
 | 20260404_FixEngineDisappearing | 修复引擎运行中状态消失问题：后端稳定性与 WebSocket 中断处理 | 2026-04-04 | 2026-04-04 | 100% | [📂 查看](./Workstream_FormatCheck/20260404_FixEngineDisappearing/) |
 | 20260404_DeepValidationEngine_P1 | 校验引擎深度重构：公式/表格语义、视觉特征聚类与自动 UI | 2026-04-03 | - | 0% | [📂 查看](./Workstream_FormatCheck/20260404_DeepValidationEngine_P1/) |

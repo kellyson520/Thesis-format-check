@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.5 — 2026-04-04
+
+### 🚑 依赖补丁 (Dependency Hotfix)
+- **修复依赖缺失**：补齐了 `requirements.txt` 中缺失的 `httpx` 依赖，解决了 v1.2.4 在纯净环境下由于缺少 `httpx` 导致无法启动的问题。
+
 ## v1.2.4 — 2026-04-04
 
 ### 🛠️ 校验引擎稳定性与 SSE 状态修复 (Engine Stability & SSE State Fixes)
